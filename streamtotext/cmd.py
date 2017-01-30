@@ -1,11 +1,11 @@
 import asyncio
 
-import audio
-import transcriber
+from streamtotext import audio
+from streamtotext import transcriber
 
 
 async def handle_events(ts):
-    async for event in ts:
+    async for event in ts.events:
         print(event)
 
 
