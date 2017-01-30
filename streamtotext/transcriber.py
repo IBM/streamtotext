@@ -21,16 +21,8 @@ class EventGenerator(object):
         return self
 
     async def __anext__(self):
-        if self._transcriber.running:
-            # We dont want to block forever if the service is stopped
-            # while were waiting for an event, so we have to poll
-            try:
-                ev = self._events_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(.2)
-            else:
-                return ev
-        else:
+        ev = await self._transcriber.next_event()
+        if ev is None:
             raise StopAsyncIteration
 
 
@@ -43,20 +35,36 @@ class Transcriber(object):
     def events(self):
         return EventGenerator(self, self._events)
 
+    async def next_event(self):
+        # We dont want to block forever if the service is stopped
+        # while were waiting for an event, so we have to poll
+        while True:
+            if self.running:
+                try:
+                    ev = self._events.get_nowait()
+                except asyncio.QueueEmpty:
+                    await asyncio.sleep(.2)
+                else:
+                    return ev
+            else:
+                break
+        return None
+
     async def transcribe(self, audio_source):
+        print('Transcribing...')
         self.running = True
-        while self.running:
-            await self._send_chunk(await audio_source.get_chunk())
+        async with audio_source.listen():
+            while self.running:
+                await self._send_chunk(await audio_source.get_chunk())
 
     def stop(self):
         self.running = False
 
 
 class WatsonTranscriber(Transcriber):
-    async def transcribe(self, audio_source):
-        pass
+    async def _send_chunk(self, audio_chunk):
+        await asyncio.sleep(.1)
 
 
 class GoogleTranscriber(Transcriber):
-    async def transcribe(self, audio_source):
-        pass
+    pass
