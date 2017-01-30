@@ -1,5 +1,7 @@
 import asyncio
 
+from streamtotext import utils
+
 class TranscribeEvent(object):
     def __init__(self, results, final):
         self.results = results
@@ -30,35 +32,33 @@ class Transcriber(object):
     def __init__(self):
         self.running = False
         self._events = asyncio.Queue(100)
+        self._stopped_running = asyncio.Event()
 
     @property
     def events(self):
         return EventGenerator(self, self._events)
 
     async def next_event(self):
-        # We dont want to block forever if the service is stopped
-        # while were waiting for an event, so we have to poll
-        while True:
-            if self.running:
-                try:
-                    ev = self._events.get_nowait()
-                except asyncio.QueueEmpty:
-                    await asyncio.sleep(.2)
-                else:
-                    return ev
-            else:
-                break
-        return None
+        try:
+            return await utils.interruptable_get(self._events,
+                                                 self._stopped_running)
+        except utils.InterruptError:
+            return None
+
+    def _start(self):
+        self.running = True
+        self._stopped_running.clear()
 
     async def transcribe(self, audio_source):
         print('Transcribing...')
-        self.running = True
+        self._start()
         async with audio_source.listen():
             while self.running:
                 await self._send_chunk(await audio_source.get_chunk())
 
     def stop(self):
         self.running = False
+        self._stopped_running.set()
 
 
 class WatsonTranscriber(Transcriber):
