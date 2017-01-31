@@ -1,7 +1,12 @@
 import asyncio
+import collections
 
 import janus
 import pyaudio
+
+AudioChunk = collections.namedtuple('AudioChunk',
+                                    ['start_time', 'audio'])
+
 
 class _ListenCtxtMgr(object):
     def __init__(self, source):
@@ -45,7 +50,7 @@ class Microphone(AudioSource):
     async def start(self):
         await super(Microphone, self).start()
         loop = asyncio.get_event_loop()
-        self._stream_queue = janus.Queue(loop)
+        self._stream_queue = janus.Queue(loop=loop)
 
         self._pyaudio = pyaudio.PyAudio()
         self._stream = self._pyaudio.open(
@@ -63,10 +68,12 @@ class Microphone(AudioSource):
         self._pyaudio.terminate()
 
     async def get_chunk(self):
-        await asyncio.sleep(.1)
+        raw_chunk = await self._stream_queue.async_q.get()
+        return AudioChunk(start_time=raw_chunk[0]['input_buffer_adc_time'],
+                          audio=raw_chunk[1])
 
     def _stream_callback(self, in_data, frame_count,
                          time_info, status_flags):
-        self._stream_queue.put((time_info, in_data))
+        self._stream_queue.sync_q.put((time_info, in_data))
         retflag = pyaudio.paContinue if self.running else pyaudio.paComplete
         return (None, retflag)

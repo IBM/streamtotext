@@ -63,6 +63,7 @@ class Transcriber(object):
 
 class WatsonTranscriber(Transcriber):
     async def _send_chunk(self, audio_chunk):
+        print("sending chunk", audio_chunk.start_time)
         await asyncio.sleep(.1)
 
 

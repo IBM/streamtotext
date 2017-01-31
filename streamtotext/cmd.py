@@ -25,12 +25,16 @@ def explode_config_arg(arg):
     return dict([x.split('=') for x in arg.split(',')])
 
 
+def sanitize_source_config(config):
+    if 'device_ndx' in config:
+        config['device_ndx'] = int(config['device_ndx'])
+    return config
+
+
 def cmd_transcribe(args):
     source_config = explode_config_arg(args.audio_source_config)
+    source_config = sanitize_source_config(source_config)
     trans_config = explode_config_arg(args.transcriber_config)
-
-    if 'device_ndx' in source_config:
-        source_config['device_ndx'] = int(source_config['device_ndx'])
 
     mic = audio.Microphone(**source_config)
     ts = transcriber.WatsonTranscriber(**trans_config)
@@ -51,7 +55,6 @@ def main():
     parser_transcribe = subparsers.add_parser(
         'transcribe', help='Transcribe an audio source.'
     )
-
     parser_transcribe.add_argument('audio_source',
                                    choices=['microphone'], help='Audio source')
     parser_transcribe.add_argument('--audio-source-config', type=str,
@@ -65,6 +68,9 @@ def main():
                                         'transcriber',
                                    default='')
     parser_transcribe.set_defaults(func=cmd_transcribe)
+
+    parser_list_devices = subparsers.add_parser(
+        'list_devices', help='List local audio devices')
 
     args = parser.parse_args()
     if 'func' in args:
