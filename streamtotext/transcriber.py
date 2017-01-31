@@ -45,18 +45,18 @@ class Transcriber(object):
         except utils.InterruptError:
             return None
 
-    def _start(self):
+    async def _start(self):
         self.running = True
         self._stopped_running.clear()
 
     async def transcribe(self, audio_source):
         print('Transcribing...')
-        self._start()
+        await self._start()
         async with audio_source.listen():
             while self.running:
                 await self._send_chunk(await audio_source.get_chunk())
 
-    def stop(self):
+    async def stop(self):
         self.running = False
         self._stopped_running.set()
 

@@ -44,7 +44,6 @@ class Microphone(AudioSource):
 
     async def start(self):
         await super(Microphone, self).start()
-        return None
         loop = asyncio.get_event_loop()
         self._stream_queue = janus.Queue(loop)
 
@@ -55,11 +54,11 @@ class Microphone(AudioSource):
             channels=self._channels,
             rate=self._rate,
             input_device_index=self._device_ndx,
-            stream_callback=self._stream_callback)
+            stream_callback=self._stream_callback
+        )
 
     async def stop(self):
         await super(Microphone, self).stop()
-        return None
         self._stream.close()
         self._pyaudio.terminate()
 
