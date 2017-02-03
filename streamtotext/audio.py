@@ -39,6 +39,7 @@ class Microphone(AudioSource):
                  channels=1,
                  rate=16000,
                  device_ndx=0):
+        super(Microphone, self).__init__()
         self._format = audio_format
         self._channels = channels
         self._rate = rate
@@ -77,3 +78,14 @@ class Microphone(AudioSource):
         self._stream_queue.sync_q.put((time_info, in_data))
         retflag = pyaudio.paContinue if self.running else pyaudio.paComplete
         return (None, retflag)
+
+
+class SquelchedSource(AudioSource):
+    def __init__(self, source):
+        super(SquelchedSource, self).__init__()
+        self._source = source
+        self._recent_chunks = collections.deque(100)
+
+    async def detect_squelch_level(self):
+        async with self._source.listen():
+            chunk = await self._source.get_chunk()
