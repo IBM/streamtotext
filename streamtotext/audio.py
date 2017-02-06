@@ -1,11 +1,50 @@
 import asyncio
 import collections
+import time
 
 import janus
 import pyaudio
 
+# Using a namedtuple for audio chunks due to their lightweight nature
 AudioChunk = collections.namedtuple('AudioChunk',
-                                    ['start_time', 'audio'])
+                                    ['start_time', 'audio', 'width', 'freq'])
+
+
+def chunk_samples(chunk):
+    return len(chunk.audio) / chunk.width
+
+
+def even_chunk_iterator(iterable, chunk_samples):
+    sample_cnt = 0
+    sample_queue = collections.deque()
+    for chunk in iterable:
+        while chunk is not None:
+            sample_cnt += chunk_samples(chunk)
+            if sample_cnt < chunk_samples:
+                sample_queue.append(chunk)
+                chunk = None
+                continue
+            elif sample_cnt == chunk_samples:
+                sample_queue.append(chunk)
+                yield merge_chunks(sample_queue)
+                sample_queue = collections.deque()
+                chunk = None
+            else:
+                # We need to break up the chunk
+                overshoot = sample_cnt - chunk_samples
+                overshoot_samples = overshoot * chunk.width
+                ret_audio = buffer(chunk.audio, 0, overshoot_samples)
+                leftover_audio = buffer(chunk.audio, overshoot_samples)
+                leftover_chunk = AudioChunk(
+                    chunk.start_time, leftover_audio, chunk.width, chunk.freq
+                )
+                ret_chunk = AudioChunk(
+                    chunk.start_time, ret_audio, chunk.width, chunk.freq
+                )
+                sample_queue.append(ret_chunk)
+                yield merge_chunks(sample_queue)
+                sample_queue = collections.deque()
+                chunk = leftover_chunk
 
 
 class _ListenCtxtMgr(object):
@@ -81,11 +120,19 @@ class Microphone(AudioSource):
 
 
 class SquelchedSource(AudioSource):
-    def __init__(self, source):
+    def __init__(self, source, squelch_level=None):
         super(SquelchedSource, self).__init__()
         self._source = source
-        self._recent_chunks = collections.deque(100)
+        self._recent_chunks = collections.deque(maxlen=100)
+        self.squelch_level = squelch_level
 
-    async def detect_squelch_level(self):
+    async def detect_squelch_level(self, detect_time=10):
+        start_time = time.time()
+        end_time = start_time + detect_time
+        audio_chunks = collections.deque()
         async with self._source.listen():
-            chunk = await self._source.get_chunk()
+            while time.time() < end_time:
+                audio_chunks.append(await self._source.get_chunk())
+        level = 1
+        self.squelch_level = level
+        return level
