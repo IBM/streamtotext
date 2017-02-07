@@ -10,31 +10,44 @@ AudioChunk = collections.namedtuple('AudioChunk',
                                     ['start_time', 'audio', 'width', 'freq'])
 
 
-def chunk_samples(chunk):
+def chunk_sample_cnt(chunk):
     return len(chunk.audio) / chunk.width
 
 
+def merge_chunks(chunks):
+    assert(len(chunks) > 0)
+    audio = b''.join([x.audio for x in chunks])
+    return AudioChunk(chunks[0].start_time,
+                      audio,
+                      chunks[0].width,
+                      chunks[0].freq)
+
+
 def even_chunk_iterator(iterable, chunk_samples):
-    sample_cnt = 0
+    sample_queue_cnt = 0
     sample_queue = collections.deque()
     for chunk in iterable:
         while chunk is not None:
-            sample_cnt += chunk_samples(chunk)
-            if sample_cnt < chunk_samples:
+            cur_chunk_samples = chunk_sample_cnt(chunk)
+            new_sample_cnt = cur_chunk_samples + sample_queue_cnt
+            if new_sample_cnt < chunk_samples:
+                # We need more chunks, append to the sample queue and grab next
                 sample_queue.append(chunk)
+                sample_queue_cnt += cur_chunk_samples
                 chunk = None
                 continue
-            elif sample_cnt == chunk_samples:
+            elif new_sample_cnt == chunk_samples:
                 sample_queue.append(chunk)
                 yield merge_chunks(sample_queue)
                 sample_queue = collections.deque()
+                sample_queue_cnt = 0
                 chunk = None
             else:
                 # We need to break up the chunk
-                overshoot = sample_cnt - chunk_samples
-                overshoot_samples = overshoot * chunk.width
-                ret_audio = buffer(chunk.audio, 0, overshoot_samples)
-                leftover_audio = buffer(chunk.audio, overshoot_samples)
+                overshoot = new_sample_cnt - chunk_samples
+                overshoot_samples = int(overshoot * chunk.width)
+                ret_audio = memoryview(chunk.audio)[:-overshoot_samples]
+                leftover_audio = memoryview(chunk.audio)[overshoot_samples:]
                 leftover_chunk = AudioChunk(
                     chunk.start_time, leftover_audio, chunk.width, chunk.freq
                 )
@@ -44,6 +57,7 @@ def even_chunk_iterator(iterable, chunk_samples):
                 sample_queue.append(ret_chunk)
                 yield merge_chunks(sample_queue)
                 sample_queue = collections.deque()
+                sample_queue_cnt = 0
                 chunk = leftover_chunk
 
 

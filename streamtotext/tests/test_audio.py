@@ -100,6 +100,20 @@ class SilentSourceTestCase(base.TestCase):
         self.assertThat(start_time + .2, IsApproximately(time.time(), .1))
 
 
+class EvenChunkIteratorTestCase(base.TestCase):
+    @base.asynctest
+    async def test_uneven_chunks(self):
+        audio1 = b'\0\0' * 160
+        audio2 = b'\0\0' * 80
+        audio3 = b'\0\0' * 240
+
+        audios = (audio1, audio2, audio3)
+        chunks = [audio.AudioChunk(time.time(), x, 2, 16000) for x in audios]
+
+        for i, chunk in enumerate(audio.even_chunk_iterator(chunks, 100)):
+            self.assertEqual(200, len(chunk.audio))
+
+
 class SquelchedSourceTestCase(base.TestCase):
     @base.asynctest
     async def test_detect_silent_level(self):
