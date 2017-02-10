@@ -1,6 +1,8 @@
 import asyncio
 import time
 
+import testtools
+
 from streamtotext import audio
 from streamtotext.tests import base
 
@@ -110,7 +112,7 @@ class EvenChunkIteratorTestCase(base.TestCase):
         audios = (audio1, audio2, audio3)
         chunks = [audio.AudioChunk(time.time(), x, 2, 16000) for x in audios]
 
-        for i, chunk in enumerate(audio.even_chunk_iterator(chunks, 100)):
+        for chunk in audio.EvenChunkIterator(iter(chunks), 100):
             self.assertEqual(200, len(chunk.audio))
 
 
@@ -118,5 +120,13 @@ class SquelchedSourceTestCase(base.TestCase):
     @base.asynctest
     async def test_detect_silent_level(self):
         a_s = audio.SquelchedSource(SilentAudioSource())
-        level = await a_s.detect_squelch_level(detect_time=.5)
+        level = await a_s.detect_squelch_level(detect_time=.2)
         self.assertEqual(level, a_s.squelch_level)
+        self.assertEqual(0, level)
+
+    @base.asynctest
+    async def test_get_silent_chunk(self):
+        a_s = audio.SquelchedSource(SilentAudioSource(), squelch_level=0)
+        async with a_s.listen():
+            with testtools.ExpectedException(asyncio.TimeoutError):
+                await asyncio.wait_for(a_s.get_chunk(), .2)

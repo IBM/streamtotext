@@ -1,4 +1,5 @@
 import asyncio
+import audioop
 import collections
 import time
 
@@ -11,7 +12,7 @@ AudioChunk = collections.namedtuple('AudioChunk',
 
 
 def chunk_sample_cnt(chunk):
-    return len(chunk.audio) / chunk.width
+    return int(len(chunk.audio) / chunk.width)
 
 
 def merge_chunks(chunks):
@@ -23,42 +24,78 @@ def merge_chunks(chunks):
                       chunks[0].freq)
 
 
-def even_chunk_iterator(iterable, chunk_samples):
-    sample_queue_cnt = 0
-    sample_queue = collections.deque()
-    for chunk in iterable:
-        while chunk is not None:
-            cur_chunk_samples = chunk_sample_cnt(chunk)
-            new_sample_cnt = cur_chunk_samples + sample_queue_cnt
-            if new_sample_cnt < chunk_samples:
+def split_chunk(chunk, sample_offset):
+    offset = int(sample_offset * chunk.width)
+    first_audio = memoryview(chunk.audio)[:-offset]
+    second_audio = memoryview(chunk.audio)[offset:]
+    first_chunk = AudioChunk(
+        chunk.start_time, first_audio, chunk.width, chunk.freq
+    )
+    second_chunk = AudioChunk(
+        chunk.start_time, second_audio, chunk.width, chunk.freq
+    )
+    return first_chunk, second_chunk
+
+
+class EvenChunkIterator(object):
+    def __init__(self, iterator, chunk_size):
+        self._iterator = iterator
+        self._chunk_size = chunk_size
+        self._cur_chunk = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        sample_queue = collections.deque()
+
+        ret_chunk_size = 0
+        while ret_chunk_size < self._chunk_size:
+            chunk = self._cur_chunk or next(self._iterator)
+            self._cur_chunk = None
+            cur_chunk_size = chunk_sample_cnt(chunk)
+            ret_chunk_size += cur_chunk_size
+
+            if ret_chunk_size < self._chunk_size:
                 # We need more chunks, append to the sample queue and grab next
                 sample_queue.append(chunk)
-                sample_queue_cnt += cur_chunk_samples
-                chunk = None
-                continue
-            elif new_sample_cnt == chunk_samples:
+            elif ret_chunk_size == self._chunk_size:
                 sample_queue.append(chunk)
-                yield merge_chunks(sample_queue)
-                sample_queue = collections.deque()
-                sample_queue_cnt = 0
-                chunk = None
             else:
                 # We need to break up the chunk
-                overshoot = new_sample_cnt - chunk_samples
-                overshoot_samples = int(overshoot * chunk.width)
-                ret_audio = memoryview(chunk.audio)[:-overshoot_samples]
-                leftover_audio = memoryview(chunk.audio)[overshoot_samples:]
-                leftover_chunk = AudioChunk(
-                    chunk.start_time, leftover_audio, chunk.width, chunk.freq
-                )
-                ret_chunk = AudioChunk(
-                    chunk.start_time, ret_audio, chunk.width, chunk.freq
-                )
+                overshoot = ret_chunk_size - self._chunk_size
+                ret_chunk, leftover_chunk = split_chunk(chunk, overshoot)
                 sample_queue.append(ret_chunk)
-                yield merge_chunks(sample_queue)
-                sample_queue = collections.deque()
-                sample_queue_cnt = 0
-                chunk = leftover_chunk
+                self._cur_chunk = leftover_chunk
+
+        return merge_chunks(sample_queue)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        sample_queue = collections.deque()
+
+        ret_chunk_size = 0
+        while ret_chunk_size < self._chunk_size:
+            chunk = self._cur_chunk or await self._iterator.__anext__()
+            self._cur_chunk = None
+            cur_chunk_size = chunk_sample_cnt(chunk)
+            ret_chunk_size += cur_chunk_size
+
+            if ret_chunk_size < self._chunk_size:
+                # We need more chunks, append to the sample queue and grab next
+                sample_queue.append(chunk)
+            elif ret_chunk_size == self._chunk_size:
+                sample_queue.append(chunk)
+            else:
+                # We need to break up the chunk
+                overshoot = ret_chunk_size - self._chunk_size
+                ret_chunk, leftover_chunk = split_chunk(chunk, overshoot)
+                sample_queue.append(ret_chunk)
+                self._cur_chunk = leftover_chunk
+
+        return merge_chunks(sample_queue)
 
 
 class _ListenCtxtMgr(object):
@@ -72,9 +109,24 @@ class _ListenCtxtMgr(object):
         await self._source.stop()
 
 
+class AudioSourceChunkIterator(object):
+    def __init__(self, source):
+        self._source = source
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        return await self._source.get_chunk()
+
+
 class AudioSource(object):
     def __init__(self):
         self.running = False
+
+    @property
+    def chunks(self):
+        return AudioSourceChunkIterator(self)
 
     def listen(self):
         return _ListenCtxtMgr(self)
@@ -134,19 +186,64 @@ class Microphone(AudioSource):
 
 
 class SquelchedSource(AudioSource):
-    def __init__(self, source, squelch_level=None):
+    def __init__(self, source, sample_size=1600, squelch_level=None,
+                 prefix_samples=2):
         super(SquelchedSource, self).__init__()
         self._source = source
-        self._recent_chunks = collections.deque(maxlen=100)
+        self._recent_chunks = collections.deque(maxlen=prefix_samples)
+        self._sample_size = sample_size
         self.squelch_level = squelch_level
+        self._prefix_samples = prefix_samples
+        self._sample_width = 2
+        self._squelch_triggered = False
+        self._even_iter = EvenChunkIterator(self._source.chunks,
+                                            chunk_size=1600)
 
-    async def detect_squelch_level(self, detect_time=10):
+    async def detect_squelch_level(self, detect_time=10, threshold=.8):
         start_time = time.time()
         end_time = start_time + detect_time
         audio_chunks = collections.deque()
         async with self._source.listen():
+            even_iter = EvenChunkIterator(self._source.chunks,
+                                         self._sample_size)
             while time.time() < end_time:
-                audio_chunks.append(await self._source.get_chunk())
-        level = 1
+                audio_chunks.append(await even_iter.__anext__())
+
+        rms_vals = [audioop.rms(x.audio, self._sample_width) for x in
+                    audio_chunks
+                    if len(x.audio) == self._sample_size * self._sample_width]
+        level = sorted(rms_vals)[int(threshold * len(rms_vals)):][-1]
         self.squelch_level = level
         return level
+
+    async def start(self):
+        assert(self.squelch_level is not None)
+        await super(SquelchedSource, self).start()
+        await self._source.start()
+
+    async def stop(self):
+        await super(SquelchedSource, self).start()
+        await self._source.stop()
+
+    async def get_chunk(self):
+        while True:
+            chunk = await self._even_iter.__anext__()
+            self._recent_chunks.append(chunk)
+
+            if self._is_over_squelch(self._recent_chunks):
+                return merge_chunks(self._recent_chunks)
+
+    def _is_over_squelch(self, chunks):
+        rms = audioop.rms(merge_chunks(chunks).audio, chunks[0].width)
+        if self._squelch_triggered:
+            if rms < (self.squelch_level * .8):
+                self._squelch_triggered = False
+                return False
+            else:
+                return True
+        else:
+            if rms > self.squelch_level:
+                self._squelch_triggered = True
+                return True
+            else:
+                return False
