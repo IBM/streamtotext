@@ -1,8 +1,6 @@
 import asyncio
 import time
 
-import testtools
-
 from streamtotext import audio
 from streamtotext.tests import base
 
@@ -41,41 +39,7 @@ class SilentAudioSource(GeneratedAudioSource):
                                 width=2, freq=self._sample_rate)
 
 
-class IsApproximatelyMismatch(object):
-    def __init__(self, actual, value, margin):
-        self.actual = actual
-        self.value = value
-        self.margin = margin
-
-    def describe(self):
-        return "%r is not within a margin of %r from %r" % (
-            self.actual, self.margin, self.value)
-
-    def get_details(self):
-        return {}
-
-
-class IsApproximately(object):
-    def __init__(self, value, margin):
-        self.value = value
-        self.margin = margin
-
-    def __str__(self):
-        return 'IsApproximately(%r, %r)' % (self.value, self.margin)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def match(self, actual):
-        if ((self.value > (actual - self.margin)) and
-            (self.value < (actual + self.margin))):
-            return None
-        else:
-            return IsApproximatelyMismatch(actual, self.value, self.margin)
-
-
 class SilentSourceTestCase(base.TestCase):
-    @base.asynctest
     async def test_get_chunk_audio(self):
         a_s = SilentAudioSource()
         chunk = await a_s.get_chunk()
@@ -87,23 +51,21 @@ class SilentSourceTestCase(base.TestCase):
         chunk = await a_s.get_chunk()
         self.assertEqual(b'\0'*len(chunk.audio), chunk.audio)
 
-    @base.asynctest
     async def test_get_chunk_delay(self):
         a_s = SilentAudioSource()
         start_time = time.time()
 
         chunk = await a_s.get_chunk()
-        self.assertThat(start_time, IsApproximately(time.time(), .01))
+        self.assertAlmostEqual(start_time, time.time(), delta=.01)
 
         chunk = await a_s.get_chunk()
-        self.assertThat(start_time + .1, IsApproximately(time.time(), .1))
+        self.assertAlmostEqual(start_time + .1, time.time(), delta=.1)
 
         chunk = await a_s.get_chunk()
-        self.assertThat(start_time + .2, IsApproximately(time.time(), .1))
+        self.assertAlmostEqual(start_time + .2, time.time(), delta=.1)
 
 
 class EvenChunkIteratorTestCase(base.TestCase):
-    @base.asynctest
     async def test_uneven_chunks(self):
         audio1 = b'\0\0' * 160
         audio2 = b'\0\0' * 80
@@ -117,16 +79,14 @@ class EvenChunkIteratorTestCase(base.TestCase):
 
 
 class SquelchedSourceTestCase(base.TestCase):
-    @base.asynctest
     async def test_detect_silent_level(self):
         a_s = audio.SquelchedSource(SilentAudioSource())
         level = await a_s.detect_squelch_level(detect_time=.2)
         self.assertEqual(level, a_s.squelch_level)
         self.assertEqual(0, level)
 
-    @base.asynctest
     async def test_get_silent_chunk(self):
         a_s = audio.SquelchedSource(SilentAudioSource(), squelch_level=0)
         async with a_s.listen():
-            with testtools.ExpectedException(asyncio.TimeoutError):
+            with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(a_s.get_chunk(), .2)
