@@ -138,6 +138,19 @@ class AudioSource(object):
         self.running = False
 
 
+class AudioSourceProcessor(AudioSource):
+    def __init__(self, source):
+        self._source = source
+
+    async def start(self):
+        await super(AudioSourceProcessor, self).start()
+        await self._source.start()
+
+    async def stop(self):
+        await self._source.stop()
+        await super(AudioSourceProcessor, self).stop()
+
+
 class Microphone(AudioSource):
     def __init__(self,
                  audio_format=pyaudio.paInt16,
@@ -176,7 +189,7 @@ class Microphone(AudioSource):
     async def get_chunk(self):
         raw_chunk = await self._stream_queue.async_q.get()
         return AudioChunk(start_time=raw_chunk[0]['input_buffer_adc_time'],
-                          audio=raw_chunk[1])
+                          audio=raw_chunk[1], freq=self._rate, width=2)
 
     def _stream_callback(self, in_data, frame_count,
                          time_info, status_flags):
@@ -185,11 +198,22 @@ class Microphone(AudioSource):
         return (None, retflag)
 
 
-class SquelchedSource(AudioSource):
+class RateConvert(AudioSource):
+    def __init__(self, source, n_channels, in_rate, out_rate):
+        super(RateConvert, self).__init__(source)
+        self._n_channels = n_channels
+        self._in_rate = in_rate
+        self._out_rate = out_rate
+
+    async def get_chunk(self):
+        chunk = await self._source.get_chunk()
+        return chunk
+
+
+class SquelchedSource(AudioSourceProcessor):
     def __init__(self, source, sample_size=1600, squelch_level=None,
                  prefix_samples=2):
-        super(SquelchedSource, self).__init__()
-        self._source = source
+        super(SquelchedSource, self).__init__(source)
         self._recent_chunks = collections.deque(maxlen=prefix_samples)
         self._sample_size = sample_size
         self.squelch_level = squelch_level
@@ -219,11 +243,6 @@ class SquelchedSource(AudioSource):
     async def start(self):
         assert(self.squelch_level is not None)
         await super(SquelchedSource, self).start()
-        await self._source.start()
-
-    async def stop(self):
-        await super(SquelchedSource, self).start()
-        await self._source.stop()
 
     async def get_chunk(self):
         while True:

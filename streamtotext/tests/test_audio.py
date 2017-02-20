@@ -59,10 +59,10 @@ class SilentSourceTestCase(base.TestCase):
         self.assertAlmostEqual(start_time, time.time(), delta=.01)
 
         chunk = await a_s.get_chunk()
-        self.assertAlmostEqual(start_time + .1, time.time(), delta=.1)
+        self.assertAlmostEqual(start_time + .1, time.time(), delta=.2)
 
         chunk = await a_s.get_chunk()
-        self.assertAlmostEqual(start_time + .2, time.time(), delta=.1)
+        self.assertAlmostEqual(start_time + .2, time.time(), delta=.2)
 
 
 class EvenChunkIteratorTestCase(base.TestCase):
