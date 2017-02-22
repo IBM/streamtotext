@@ -80,17 +80,25 @@ class EvenChunkIteratorTestCase(base.TestCase):
 
 
 class WaveSourceTestCase(base.TestCase):
-    async def test_hello_wave(self):
+    async def test_hello_44100_wave_get_chunk(self):
         path = os.path.join(
             os.path.dirname(__file__),
-            'test_data/hello.wav'
+            'test_data/hello_44100.wav'
         )
-        src = audio.WaveSource(path)
+        src = audio.WaveSource(path, chunk_frames=1000)
         chunks = []
-        async for chunk in src.chunks:
-            chunks.append(chunk)
+        async with src.listen():
+            async for chunk in src.chunks:
+                chunks.append(chunk)
+
+        for chunk in chunks[:-1]:
+            self.assertEqual(2000, len(chunk.audio))
+            self.assertEqual(2, chunk.width)
+            self.assertEqual(44100, chunk.freq)
+
         full_chunk = audio.merge_chunks(chunks)
-        import pdb;pdb.set_trace()
+        self.assertEqual(2, full_chunk.width)
+        self.assertEqual(44100, full_chunk.freq)
 
 
 class SquelchedSourceTestCase(base.TestCase):
@@ -105,3 +113,19 @@ class SquelchedSourceTestCase(base.TestCase):
         async with a_s.listen():
             with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(a_s.get_chunk(), .2)
+
+    async def test_hello_44100_get_chunk(self):
+        path = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/hello_44100.wav'
+        )
+        wav = audio.WaveSource(path, chunk_frames=1000)
+        a_s = audio.SquelchedSource(wav)
+        level = await a_s.detect_squelch_level()
+
+        chunks = []
+        async with a_s.listen():
+            async for chunk in a_s.chunks:
+                chunks.append(chunk)
+
+        full_chunk = audio.merge_chunks(chunks)

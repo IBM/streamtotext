@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 
 import pyaudio
 
@@ -43,6 +44,19 @@ def cmd_transcribe(args):
     res = loop.run_until_complete(asyncio.gather(*tasks))
 
 
+def cmd_play(args):
+    loop = asyncio.get_event_loop()
+
+    wav_path = os.path.join(
+        os.path.dirname(__file__),
+        'tests/test_data/hello_44100.wav'
+    )
+    wav = audio.WaveSource(wav_path, chunk_frames=1000)
+    squelched = audio.SquelchedSource(wav, squelch_level=500)
+    player = audio.AudioPlayer(squelched, 2, 1, 44100)
+    loop.run_until_complete(player.play())
+
+
 def cmd_list_devices(args):
     p = pyaudio.PyAudio()
     for i in range(p.get_device_count()):
@@ -65,6 +79,11 @@ def main():
                                    choices=['watson'],
                                    help='Transcription service')
     parser_transcribe.set_defaults(func=cmd_transcribe)
+
+    parser_play = subparsers.add_parser(
+        'play', help='Play an audio source.'
+    )
+    parser_play.set_defaults(func=cmd_play)
 
     parser_list_devices = subparsers.add_parser(
         'list-devices', help='List local audio devices')

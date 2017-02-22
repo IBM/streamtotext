@@ -192,6 +192,7 @@ class Microphone(AudioSource):
 
     async def stop(self):
         await super(Microphone, self).stop()
+        self._stream.stop_stream()
         self._stream.close()
         self._pyaudio.terminate()
 
@@ -211,13 +212,27 @@ class WaveSource(AudioSource):
     def __init__(self, wave_path, chunk_frames=1000):
         self._wave_path = wave_path
         self._chunk_frames = chunk_frames
+        self._wave_fp = None
+        self._width = None
+        self._freq = None
+        self._channels = None
+
+    async def start(self):
+        await super(WaveSource, self).start()
         self._wave_fp = wave.open(self._wave_path)
         self._width = self._wave_fp.getsampwidth()
         self._freq = self._wave_fp.getframerate()
         self._channels = self._wave_fp.getnchannels()
+        assert(self._channels <= 2)
+
+    async def stop(self):
+        self._wave_fp.close()
+        await super(WaveSource, self).stop()
 
     async def get_chunk(self):
         frames = self._wave_fp.readframes(self._chunk_frames)
+        if self._channels == 2:
+            frames = audioop.tomono(frames, self._width, .5, .5)
         if len(frames) == 0:
             raise NoMoreChunksError('No more frames in wav')
         chunk = AudioChunk(0, audio=frames, width=self._width,
@@ -257,13 +272,16 @@ class SquelchedSource(AudioSourceProcessor):
         async with self._source.listen():
             even_iter = EvenChunkIterator(self._source.chunks,
                                          self._sample_size)
-            while time.time() < end_time:
-                audio_chunks.append(await even_iter.__anext__())
+            try:
+                while time.time() < end_time:
+                    audio_chunks.append(await even_iter.__anext__())
+            except StopAsyncIteration:
+                pass
 
         rms_vals = [audioop.rms(x.audio, self._sample_width) for x in
                     audio_chunks
                     if len(x.audio) == self._sample_size * self._sample_width]
-        level = sorted(rms_vals)[int(threshold * len(rms_vals)):][-1]
+        level = sorted(rms_vals)[int(threshold * len(rms_vals)):][0]
         self.squelch_level = level
         return level
 
@@ -293,3 +311,27 @@ class SquelchedSource(AudioSourceProcessor):
                 return True
             else:
                 return False
+
+
+class AudioPlayer(object):
+    def __init__(self, source, width, channels, freq):
+        self._source = source
+        self._width = width
+        self._channels = channels
+        self._freq = freq
+
+    async def play(self):
+        p = pyaudio.PyAudio()
+        stream = p.open(format=p.get_format_from_width(self._width),
+                              channels=self._channels,
+                              rate=self._freq,
+                              output=True)
+
+        async with self._source.listen():
+            async for chunk in self._source.chunks:
+                stream.write(chunk.audio)
+
+        stream.stop_stream()
+        stream.close()
+
+        p.terminate()
