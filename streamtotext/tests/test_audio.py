@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 
 from streamtotext import audio
@@ -76,6 +77,20 @@ class EvenChunkIteratorTestCase(base.TestCase):
 
         for chunk in audio.EvenChunkIterator(iter(chunks), 100):
             self.assertEqual(200, len(chunk.audio))
+
+
+class WaveSourceTestCase(base.TestCase):
+    async def test_hello_wave(self):
+        path = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/hello.wav'
+        )
+        src = audio.WaveSource(path)
+        chunks = []
+        async for chunk in src.chunks:
+            chunks.append(chunk)
+        full_chunk = audio.merge_chunks(chunks)
+        import pdb;pdb.set_trace()
 
 
 class SquelchedSourceTestCase(base.TestCase):

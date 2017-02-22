@@ -2,9 +2,15 @@ import asyncio
 import audioop
 import collections
 import time
+import wave
 
 import janus
 import pyaudio
+
+
+class NoMoreChunksError(Exception):
+    pass
+
 
 # Using a namedtuple for audio chunks due to their lightweight nature
 AudioChunk = collections.namedtuple('AudioChunk',
@@ -117,7 +123,10 @@ class AudioSourceChunkIterator(object):
         return self
 
     async def __anext__(self):
-        return await self._source.get_chunk()
+        try:
+            return await self._source.get_chunk()
+        except NoMoreChunksError:
+            raise StopAsyncIteration('No more chunks')
 
 
 class AudioSource(object):
@@ -196,6 +205,24 @@ class Microphone(AudioSource):
         self._stream_queue.sync_q.put((time_info, in_data))
         retflag = pyaudio.paContinue if self.running else pyaudio.paComplete
         return (None, retflag)
+
+
+class WaveSource(AudioSource):
+    def __init__(self, wave_path, chunk_frames=1000):
+        self._wave_path = wave_path
+        self._chunk_frames = chunk_frames
+        self._wave_fp = wave.open(self._wave_path)
+        self._width = self._wave_fp.getsampwidth()
+        self._freq = self._wave_fp.getframerate()
+        self._channels = self._wave_fp.getnchannels()
+
+    async def get_chunk(self):
+        frames = self._wave_fp.readframes(self._chunk_frames)
+        if len(frames) == 0:
+            raise NoMoreChunksError('No more frames in wav')
+        chunk = AudioChunk(0, audio=frames, width=self._width,
+                           freq=self._freq)
+        return chunk
 
 
 class RateConvert(AudioSource):
