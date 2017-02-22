@@ -294,20 +294,28 @@ class SquelchedSource(AudioSourceProcessor):
             chunk = await self._even_iter.__anext__()
             self._recent_chunks.append(chunk)
 
-            if self._is_over_squelch(self._recent_chunks):
-                return merge_chunks(self._recent_chunks)
+            was_triggered = self._squelch_triggered
+            self._squelch_triggered = self.check_squelch(
+                self.squelch_level,
+                self._squelch_triggered,
+                self._recent_chunks
+            )
+            if self._squelch_triggered:
+                if not was_triggered:
+                    return merge_chunks(self._recent_chunks)
+                else:
+                    return chunk
 
-    def _is_over_squelch(self, chunks):
-        rms = audioop.rms(merge_chunks(chunks).audio, chunks[0].width)
-        if self._squelch_triggered:
-            if rms < (self.squelch_level * .8):
-                self._squelch_triggered = False
+    def check_squelch(self, level, is_triggered, chunks):
+        rms_vals = [audioop.rms(x.audio, x.width) for x in chunks]
+        median_rms = sorted(rms_vals)[int(len(rms_vals) * .5)]
+        if is_triggered:
+            if median_rms < (level * .8):
                 return False
             else:
                 return True
         else:
-            if rms > self.squelch_level:
-                self._squelch_triggered = True
+            if median_rms > self.squelch_level:
                 return True
             else:
                 return False
