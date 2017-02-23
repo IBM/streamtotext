@@ -271,7 +271,7 @@ class SquelchedSource(AudioSourceProcessor):
         audio_chunks = collections.deque()
         async with self._source.listen():
             even_iter = EvenChunkIterator(self._source.chunks,
-                                         self._sample_size)
+                                          self._sample_size)
             try:
                 while time.time() < end_time:
                     audio_chunks.append(await even_iter.__anext__())
@@ -334,9 +334,9 @@ class AudioPlayer(object):
     async def play(self):
         p = pyaudio.PyAudio()
         stream = p.open(format=p.get_format_from_width(self._width),
-                              channels=self._channels,
-                              rate=self._freq,
-                              output=True)
+                        channels=self._channels,
+                        rate=self._freq,
+                        output=True)
 
         async with self._source.listen():
             async for chunk in self._source.chunks:

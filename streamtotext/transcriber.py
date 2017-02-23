@@ -4,7 +4,8 @@ import json
 
 import websockets
 
-from streamtotext import audio, utils
+from streamtotext import audio
+
 
 class TranscribeResult(object):
     def __init__(self, transcript, confidence=None):
@@ -87,7 +88,7 @@ class WatsonStartError(Exception):
         self._msg = msg
 
     def __str__(self):
-        return 'Connection start failure. Got: %s' % msg
+        return 'Connection start failure. Got: %s' % self.msg
 
 
 class WatsonTranscriber(Transcriber):
@@ -120,13 +121,13 @@ class WatsonTranscriber(Transcriber):
 
     async def _send_start(self, ws, rate):
         start_data = {
-	    "action": "start",
-	    "content-type": "audio/l16;rate=%d" % rate,
-	    "continuous": True,
-	    "interim_results": True,
-	    "word_confidence": True,
-	    "timestamps": True,
-	    "max_alternatives": 3
+            "action": "start",
+            "content-type": "audio/l16;rate=%d" % rate,
+            "continuous": True,
+            "interim_results": True,
+            "word_confidence": True,
+            "timestamps": True,
+            "max_alternatives": 3
         }
         await ws.send(json.dumps(start_data))
         msg = json.loads(await ws.recv())
@@ -149,7 +150,7 @@ class WatsonTranscriber(Transcriber):
 
     def _to_auth_header(self, user, passwd):
         seed = ':'.join((user, passwd))
-        return ' '.join(('Basic', 
+        return ' '.join(('Basic',
                          base64.b64encode(seed.encode('utf-8')).decode()))
 
     def _msg_to_event(self, msg):

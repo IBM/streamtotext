@@ -1,6 +1,7 @@
 import asyncio
 import os
 
+
 class InterruptError(Exception):
     pass
 

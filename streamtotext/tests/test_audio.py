@@ -5,6 +5,7 @@ import time
 from streamtotext import audio
 from streamtotext.tests import base
 
+
 class GeneratedAudioSource(audio.AudioSource):
     def __init__(self):
         super(GeneratedAudioSource, self).__init__()
@@ -22,7 +23,6 @@ class GeneratedAudioSource(audio.AudioSource):
             if delta < self._chunk_rate:
                 await asyncio.sleep(delta)
                 return await self.get_chunk()
-                return ret
             else:
                 sample_cnt = int(delta * self._sample_rate)
                 chunk = self.gen_sample(self._last_chunk_time, sample_cnt)
@@ -50,19 +50,19 @@ class SilentSourceTestCase(base.TestCase):
         self.assertEqual(sample, chunk.audio)
 
         chunk = await a_s.get_chunk()
-        self.assertEqual(b'\0'*len(chunk.audio), chunk.audio)
+        self.assertEqual(b'\0' * len(chunk.audio), chunk.audio)
 
     async def test_get_chunk_delay(self):
         a_s = SilentAudioSource()
         start_time = time.time()
 
-        chunk = await a_s.get_chunk()
+        await a_s.get_chunk()
         self.assertAlmostEqual(start_time, time.time(), delta=.01)
 
-        chunk = await a_s.get_chunk()
+        await a_s.get_chunk()
         self.assertAlmostEqual(start_time + .1, time.time(), delta=.2)
 
-        chunk = await a_s.get_chunk()
+        await a_s.get_chunk()
         self.assertAlmostEqual(start_time + .2, time.time(), delta=.2)
 
 
@@ -121,11 +121,9 @@ class SquelchedSourceTestCase(base.TestCase):
         )
         wav = audio.WaveSource(path, chunk_frames=1000)
         a_s = audio.SquelchedSource(wav)
-        level = await a_s.detect_squelch_level()
+        await a_s.detect_squelch_level()
 
         chunks = []
         async with a_s.listen():
             async for chunk in a_s.chunks:
                 chunks.append(chunk)
-
-        full_chunk = audio.merge_chunks(chunks)

@@ -9,6 +9,10 @@ from streamtotext import transcriber
 from streamtotext import utils
 
 
+class CommandError(Exception):
+    pass
+
+
 async def handle_events(ts):
     while not ts.running:
         await asyncio.sleep(.1)
@@ -43,7 +47,7 @@ def cmd_transcribe(args):
         asyncio.ensure_future(ts.transcribe()),
         asyncio.ensure_future(handle_events(ts)),
     ]
-    res = loop.run_until_complete(asyncio.gather(*tasks))
+    loop.run_until_complete(asyncio.gather(*tasks))
 
 
 def cmd_play(args):
