@@ -8,11 +8,6 @@ from streamtotext import audio
 from streamtotext import transcriber
 from streamtotext import utils
 
-async def timeout(ts, secs):
-    await asyncio.sleep(secs)
-    print('Timeout reached')
-    await ts.stop()
-
 
 async def handle_events(ts):
     while not ts.running:
@@ -47,7 +42,6 @@ def cmd_transcribe(args):
     tasks = [
         asyncio.ensure_future(ts.transcribe()),
         asyncio.ensure_future(handle_events(ts)),
-        asyncio.ensure_future(timeout(ts, 200))
     ]
     res = loop.run_until_complete(asyncio.gather(*tasks))
 

@@ -6,10 +6,26 @@ import websockets
 
 from streamtotext import audio, utils
 
+class TranscribeResult(object):
+    def __init__(self, transcript, confidence=None):
+        self.transcript = transcript
+        self.confidence = confidence
+
+    def __str__(self):
+        return 'TranscribeResult(transcript=%s, confidence=%s)' % (
+            self.transcript, self.confidence
+        )
+
+
 class TranscribeEvent(object):
     def __init__(self, results, final):
         self.results = results
-        slef.final = final
+        self.final = final
+
+    def __str__(self):
+        ret = 'TranscribeEvent(results=[%s], final=%s)'
+        results_str = ', '.join([str(x) for x in self.results])
+        return ret % (results_str, self.final)
 
 
 class GoogleTranscribeEvent(TranscribeEvent):
@@ -43,11 +59,7 @@ class Transcriber(object):
         return EventGenerator(self)
 
     async def next_event(self):
-        try:
-            return await utils.interruptable_get(self._events,
-                                                 self._stopped_running)
-        except utils.InterruptError:
-            return None
+        return None
 
     async def _start(self):
         self.running = True
@@ -61,7 +73,10 @@ class Transcriber(object):
                 while self.running:
                     await self._send_chunk(await self._source.get_chunk())
             except audio.NoMoreChunksError:
-                pass
+                await self._send_complete()
+
+    async def send_complete(self):
+        pass
 
     async def stop(self):
         self.running = False
@@ -104,6 +119,10 @@ class WatsonTranscriber(Transcriber):
         print('Done.')
         await super(WatsonTranscriber, self)._start()
 
+    async def stop(self):
+        self._ws.close()
+        await super(WatsonTranscriber, self).stop()
+
     async def _send_start(self, ws, rate):
         start_data = {
 	    "action": "start",
@@ -124,11 +143,14 @@ class WatsonTranscriber(Transcriber):
         await self._ws.send(audio_chunk.audio)
         print('Done')
 
+    async def _send_complete(self):
+        await self._ws.send(json.dumps({'action': 'stop'}))
+
     async def next_event(self):
         if self._ws is not None:
             read = await self._ws.recv()
             msg = json.loads(read)
-            return msg
+            return self._msg_to_event(msg)
         else:
             return None
 
@@ -136,6 +158,15 @@ class WatsonTranscriber(Transcriber):
         seed = ':'.join((user, passwd))
         return ' '.join(('Basic', 
                          base64.b64encode(seed.encode('utf-8')).decode()))
+
+    def _msg_to_event(self, msg):
+        t_rs = []
+        for result in msg.get('results', [{}]):
+            for alt in result.get('alternatives', []):
+                t_rs.append(TranscribeResult(alt['transcript'],
+                                             alt.get('confidence', None)))
+
+        return TranscribeEvent(t_rs, msg.get('final', False))
 
 
 class GoogleTranscriber(Transcriber):
