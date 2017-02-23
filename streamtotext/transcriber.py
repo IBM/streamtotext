@@ -66,7 +66,6 @@ class Transcriber(object):
         self._stopped_running.clear()
 
     async def transcribe(self):
-        print('Transcribing...')
         await self._start()
         async with self._source.listen():
             try:
@@ -108,15 +107,11 @@ class WatsonTranscriber(Transcriber):
     async def _start(self):
         connect_url = 'wss://%s/%s' % (self._host, self._uri_base)
         auth_header = self._to_auth_header(self._user, self._passwd)
-        print('Connecting to %s. Auth=%s' % (connect_url, auth_header))
         self._ws = await websockets.connect(
             connect_url,
             extra_headers={'Authorization': auth_header}
         )
-        print('Done.')
-        print('Sending start data.')
         await self._send_start(self._ws, self._source_freq)
-        print('Done.')
         await super(WatsonTranscriber, self)._start()
 
     async def stop(self):
@@ -139,9 +134,7 @@ class WatsonTranscriber(Transcriber):
             raise WatsonStartError(msg)
 
     async def _send_chunk(self, audio_chunk):
-        print('Sending chunk')
         await self._ws.send(audio_chunk.audio)
-        print('Done')
 
     async def _send_complete(self):
         await self._ws.send(json.dumps({'action': 'stop'}))
