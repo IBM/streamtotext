@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 class InterruptError(Exception):
     pass
@@ -29,3 +30,7 @@ async def interruptable_get(queue, event, loop=None):
         return get_fut.result()
     get_fut.cancel()
     raise InterruptError
+
+
+def wav_dir():
+    return os.path.join(os.path.dirname(__file__), 'tests/test_data')

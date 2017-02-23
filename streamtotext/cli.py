@@ -6,6 +6,7 @@ import pyaudio
 
 from streamtotext import audio
 from streamtotext import transcriber
+from streamtotext import utils
 
 async def timeout(ts, secs):
     await asyncio.sleep(secs)
@@ -22,24 +23,31 @@ async def handle_events(ts):
     print('No more events')
 
 
+def hello_wave_source():
+    wav_path = os.path.join(utils.wav_dir(), 'hello_44100.wav')
+    return audio.WaveSource(wav_path, chunk_frames=1000)
+
+
 def cmd_transcribe(args):
-    mic = audio.Microphone(rate=44100)
-    squelched = audio.SquelchedSource(mic)
+    try:
+        user = os.environ['WATSON_SST_USER']
+        passwd = os.environ['WATSON_SST_PASSWORD']
+    except KeyError:
+        raise CommandError('Missing WATSON_SST_USER or WATSON_SST_PASSWORD '
+                           'environment variable.')
+
+    mic = hello_wave_source()
+    squelched = audio.SquelchedSource(mic, squelch_level=500)
 
     loop = asyncio.get_event_loop()
 
-    print('Detecting squelch level.')
-    level = loop.run_until_complete(
-        squelched.detect_squelch_level(detect_time=4)
-    )
-    print('Done. Level is %f' % level)
-
-    ts = transcriber.WatsonTranscriber()
+    ts = transcriber.WatsonTranscriber(squelched, 44100, user=user,
+                                       passwd=passwd)
 
     tasks = [
-        asyncio.ensure_future(ts.transcribe(squelched)),
+        asyncio.ensure_future(ts.transcribe()),
         asyncio.ensure_future(handle_events(ts)),
-        asyncio.ensure_future(timeout(ts, 2))
+        asyncio.ensure_future(timeout(ts, 200))
     ]
     res = loop.run_until_complete(asyncio.gather(*tasks))
 
@@ -47,11 +55,7 @@ def cmd_transcribe(args):
 def cmd_play(args):
     loop = asyncio.get_event_loop()
 
-    wav_path = os.path.join(
-        os.path.dirname(__file__),
-        'tests/test_data/hello_44100.wav'
-    )
-    wav = audio.WaveSource(wav_path, chunk_frames=1000)
+    wav = hello_wave_source()
     squelched = audio.SquelchedSource(wav, squelch_level=500)
     player = audio.AudioPlayer(squelched, 2, 1, 44100)
     loop.run_until_complete(player.play())

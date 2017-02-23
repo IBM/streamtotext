@@ -291,7 +291,10 @@ class SquelchedSource(AudioSourceProcessor):
 
     async def get_chunk(self):
         while True:
-            chunk = await self._even_iter.__anext__()
+            try:
+                chunk = await self._even_iter.__anext__()
+            except StopAsyncIteration:
+                raise NoMoreChunksError('No more chunks')
             self._recent_chunks.append(chunk)
 
             was_triggered = self._squelch_triggered

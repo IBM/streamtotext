@@ -1,2 +1,3 @@
 pyaudio
 janus
+websockets
