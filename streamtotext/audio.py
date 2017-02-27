@@ -1,3 +1,11 @@
+"""Audio source and processing compoenents
+
+The two main base classes are :class:`AudioSource` which provides audio and
+:class:`AudioProcessor` which act as a pipeline processor on another
+:class:`AudioSource`.
+"""
+
+
 import asyncio
 import audioop
 import collections
@@ -15,9 +23,22 @@ class NoMoreChunksError(Exception):
 # Using a namedtuple for audio chunks due to their lightweight nature
 AudioChunk = collections.namedtuple('AudioChunk',
                                     ['start_time', 'audio', 'width', 'freq'])
+"""A sequence of audio samples.
+
+:param start_time: Unix timestamp of the first sample.
+:type start_time: int
+:param audio: Bytes array of audio samples.
+:param width: Number of bytes per sample.
+:param freq: Sampling frequency.
+"""
 
 
 def chunk_sample_cnt(chunk):
+    """Number of samples which occured in an AudioChunk
+    
+    :param chunk: The chunk to examine.
+    :type chink: AudioChunk
+    """ 
     return int(len(chunk.audio) / chunk.width)
 
 
@@ -44,6 +65,11 @@ def split_chunk(chunk, sample_offset):
 
 
 class EvenChunkIterator(object):
+    """Iterate over chunks from an audio source in even sized increments.
+
+    :parameter iterator: Iterator over audio chunks.
+    :type iterator: Iterator
+    """
     def __init__(self, iterator, chunk_size):
         self._iterator = iterator
         self._chunk_size = chunk_size
@@ -116,6 +142,11 @@ class _ListenCtxtMgr(object):
 
 
 class AudioSourceChunkIterator(object):
+    """Iterate over the chunks in an :class:`AudioSource`
+    
+    :param source: Source to iterate over.
+    :type source: AudioSource
+    """
     def __init__(self, source):
         self._source = source
 
@@ -130,37 +161,92 @@ class AudioSourceChunkIterator(object):
 
 
 class AudioSource(object):
+    """Base class for providing audio.
+
+    All classes which provide audio in some form implement this class.
+    Subclasses should override :func:`get_chunk` to await until it can return
+    an :class:`AudioChunk`.
+
+    """
     def __init__(self):
         self.running = False
 
     @property
     def chunks(self):
+        """Async iterator over get_chunk"""
         return AudioSourceChunkIterator(self)
 
     def listen(self):
+        """Listen to the AudioSource.
+        
+        :ret: Async context manager which starts and stops the AudioSource.
+        """
         return _ListenCtxtMgr(self)
 
     async def start(self):
+        """Start the audio source.
+
+        This is where initialization / opening of audio devices should happen.
+        """
         self.running = True
 
     async def stop(self):
+        """Stop the audio source.
+
+        This is where deinitialization / closing of audio devices should
+        happen.
+        """
         self.running = False
+
+    async def get_chunk(self):
+        """Get the next audio chunk from the source.
+
+        Subclasses should override this method.
+
+        :ret: Next audio chunk.
+        :rtype: Audiochunk
+        """
+        pass
 
 
 class AudioSourceProcessor(AudioSource):
+    """Base class for being a pipeline processor of an class:`AudioSource`
+
+    :parameter source: Input source
+    :type source: AudioSource
+    """
     def __init__(self, source):
         self._source = source
 
     async def start(self):
+        """Start the input audio source.
+        
+        This is intended to be called from the base class, not directly.
+        """
         await super(AudioSourceProcessor, self).start()
         await self._source.start()
 
     async def stop(self):
+        """Stop the input audio source.
+        
+        This is intended to be called from the base class, not directly.
+        """
         await self._source.stop()
         await super(AudioSourceProcessor, self).stop()
 
 
 class Microphone(AudioSource):
+    """Use a local microphone as an audio source.
+    
+    :parameter audio_format: Sample format
+    :type audio: PyAudio format
+    :parameter channels: Number of channels in microphone.
+    :type channels: int
+    :parameter rate: Sample frequency
+    :type rate: int
+    :parameter device_ndx: PyAudio device index
+    :type device_ndx: int
+    """
     def __init__(self,
                  audio_format=pyaudio.paInt16,
                  channels=1,
@@ -209,6 +295,13 @@ class Microphone(AudioSource):
 
 
 class WaveSource(AudioSource):
+    """Use a wave file as an audio source.
+
+    :parameter wave_path: Path to wave file.
+    :type wave_path: string
+    :parameter chunk_frames: Chunk size to return from get_chunk
+    :type chunk_frames: int
+    """
     def __init__(self, wave_path, chunk_frames=1000):
         self._wave_path = wave_path
         self._chunk_frames = chunk_frames
@@ -253,6 +346,26 @@ class RateConvert(AudioSource):
 
 
 class SquelchedSource(AudioSourceProcessor):
+    """Filter out samples below a volume level from an audio source.
+
+    This is useful to prevent constant transcription attempts of background
+    noise, and also to correctly create a 'trigger window' where
+    transcription attempts are made.
+
+    A sliding window of prefix_samples size is inspected. When the rms of
+    prefix_samples * sample_size samples surpasses the squelch_level this
+    source begins to emit audio. Once the rms of the sliding window passes
+    below 80% of the squelch level this source stop emitting audio.
+
+    :parameter source: Input source
+    :type source: AudioSource
+    :parameter sample_size: Size of each sample to inspect.
+    :type sample_size: int
+    :parameter squelch_level: RMS value to trigger squelch
+    :type squelch_level: int
+    :parameter prefix_samples: Number of samples of sample_size to check
+    :type prefix_samples: int
+    """
     def __init__(self, source, sample_size=1600, squelch_level=None,
                  prefix_samples=2):
         super(SquelchedSource, self).__init__(source)
@@ -325,6 +438,21 @@ class SquelchedSource(AudioSourceProcessor):
 
 
 class AudioPlayer(object):
+    """Play audio from an audio source.
+
+    This is not generally useful for transcription, but can be very useful
+    in the development of :class:`AudioSource` or :class:`AudioProcessor`
+    classes.
+
+    :param source: Source to play.
+    :type source: AudioSource
+    :param width: Bytes per sample.
+    :type width: int
+    :param channels: Number of channels in output device.
+    :type channels: int
+    :param freq: Sampling frequency of output device.
+    :type freq: int
+    """
     def __init__(self, source, width, channels, freq):
         self._source = source
         self._width = width
@@ -332,6 +460,10 @@ class AudioPlayer(object):
         self._freq = freq
 
     async def play(self):
+        """Play audio from source.
+
+        This method will block until the source runs out of audio.
+        """
         p = pyaudio.PyAudio()
         stream = p.open(format=p.get_format_from_width(self._width),
                         channels=self._channels,

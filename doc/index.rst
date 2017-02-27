@@ -10,7 +10,7 @@ Welcome to streamtotext's documentation!
    :maxdepth: 1
    :caption: Contents:
 
-   API Documentation <api/modules>
+   API Documentation <api/streamtotext>
 
 
 Indices and tables

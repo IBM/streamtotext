@@ -152,6 +152,3 @@ texinfo_documents = [
      author, 'streamtotext', 'One line description of project.',
      'Miscellaneous'),
 ]
-
-
-
