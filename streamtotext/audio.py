@@ -1,4 +1,4 @@
-"""Audio source and processing compoenents
+"""Audio source and audio processing compoenents
 
 The two main base classes are :class:`AudioSource` which provides audio and
 :class:`AudioProcessor` which act as a pipeline processor on another
@@ -25,11 +25,21 @@ AudioChunk = collections.namedtuple('AudioChunk',
                                     ['start_time', 'audio', 'width', 'freq'])
 """A sequence of audio samples.
 
+Most notably, this is the object which is returned from
+:func:`AudioSource.get_chunk`. More generally, this is the lowest level object
+passed between audio processing components.
+
+In order to make this object use minimal memory it is implemented as a
+namedtuple.
+
 :param start_time: Unix timestamp of the first sample.
 :type start_time: int
 :param audio: Bytes array of audio samples.
+:type audio: bytes
 :param width: Number of bytes per sample.
+:type width: int
 :param freq: Sampling frequency.
+:type freq: int
 """
 
 

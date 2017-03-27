@@ -1,3 +1,9 @@
+"""Transciption components
+
+The main base class which is responsible for performing transcription is
+:class:`Transcriber`.
+"""
+
 import asyncio
 import base64
 import json
@@ -36,6 +42,14 @@ class GoogleTranscribeEvent(TranscribeEvent):
 
 
 class EventGenerator(object):
+    """Asynchronously yield transcription events from a transcriber
+
+    This generator will await :func:`Transcriber.next_event` and continuously
+    yield :class:`TranscribeEvent` until none are left.
+
+    :param transcriber: Transcriber to await upon.
+    :type transcriber: Transcriber
+    """
     def __init__(self, transcriber):
         self._transcriber = transcriber
 
@@ -50,6 +64,14 @@ class EventGenerator(object):
 
 
 class Transcriber(object):
+    """Base class for implementing a transcriber.
+
+    Once :func:`transcribe` is called a transcriber awaits on get_chunk from
+    an audio source and then streams them to a transcription service.
+
+    :parameter source: Input audio source
+    :type source: audio.AudioSource
+    """
     def __init__(self, source):
         self._source = source
         self.running = False
