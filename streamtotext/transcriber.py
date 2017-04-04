@@ -73,7 +73,14 @@ class Transcriber(object):
     async def transcribe(self):
         await self._start()
         try:
-            await asyncio.wait([self._handle_audio(), self._read_events()])
+            done, pending = await asyncio.wait(
+                [self._handle_audio(), self._read_events()],
+                return_when=asyncio.FIRST_EXCEPTION
+            )
+            for fut in done:
+                exc = fut.exception()
+                if exc:
+                    raise exc
         finally:
             self._stopped_running.set()
             await self.stop()
@@ -108,14 +115,14 @@ class WatsonStartError(Exception):
 
 
 class WatsonTranscriber(Transcriber):
-    def __init__(self, source, source_freq, user, passwd,
+    def __init__(self, source, source_freq, user, password,
                  host='stream.watsonplatform.net',
                  uri_base='/speech-to-text/api/v1/recognize',
                  model='en-US_BroadbandModel'):
         super(WatsonTranscriber, self).__init__(source)
         self._source_freq = source_freq
         self._user = user
-        self._passwd = passwd
+        self._passwd = password
         self._host = host
         self._uri_base = uri_base
         self._model = model
