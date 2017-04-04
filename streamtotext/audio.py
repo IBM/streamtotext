@@ -20,6 +20,13 @@ class NoMoreChunksError(Exception):
     pass
 
 
+class NoDefaultInputDeviceError(Exception):
+    def __init__(self):
+        super(NoDefaultInputDeviceError, self).__init__(
+            'No default input device'
+        )
+
+
 # Using a namedtuple for audio chunks due to their lightweight nature
 AudioChunk = collections.namedtuple('AudioChunk',
                                     ['start_time', 'audio', 'width', 'freq'])
@@ -45,10 +52,10 @@ namedtuple.
 
 def chunk_sample_cnt(chunk):
     """Number of samples which occured in an AudioChunk
-    
+
     :param chunk: The chunk to examine.
     :type chink: AudioChunk
-    """ 
+    """
     return int(len(chunk.audio) / chunk.width)
 
 
@@ -153,7 +160,7 @@ class _ListenCtxtMgr(object):
 
 class AudioSourceChunkIterator(object):
     """Iterate over the chunks in an :class:`AudioSource`
-    
+
     :param source: Source to iterate over.
     :type source: AudioSource
     """
@@ -188,7 +195,7 @@ class AudioSource(object):
 
     def listen(self):
         """Listen to the AudioSource.
-        
+
         :ret: Async context manager which starts and stops the AudioSource.
         """
         return _ListenCtxtMgr(self)
@@ -230,7 +237,7 @@ class AudioSourceProcessor(AudioSource):
 
     async def start(self):
         """Start the input audio source.
-        
+
         This is intended to be called from the base class, not directly.
         """
         await super(AudioSourceProcessor, self).start()
@@ -238,7 +245,7 @@ class AudioSourceProcessor(AudioSource):
 
     async def stop(self):
         """Stop the input audio source.
-        
+
         This is intended to be called from the base class, not directly.
         """
         await self._source.stop()
@@ -247,7 +254,7 @@ class AudioSourceProcessor(AudioSource):
 
 class Microphone(AudioSource):
     """Use a local microphone as an audio source.
-    
+
     :parameter audio_format: Sample format
     :type audio: PyAudio format
     :parameter channels: Number of channels in microphone.

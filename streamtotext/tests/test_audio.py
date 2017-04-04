@@ -3,46 +3,13 @@ import os
 import time
 
 from streamtotext import audio
+from streamtotext.tests import audio_fakes
 from streamtotext.tests import base
-
-
-class GeneratedAudioSource(audio.AudioSource):
-    def __init__(self):
-        super(GeneratedAudioSource, self).__init__()
-        self._last_chunk_time = None
-        self._chunk_rate = .1
-        self._sample_rate = 16000
-
-    async def get_chunk(self):
-        cur_time = time.time()
-        if self._last_chunk_time is None:
-            self._last_chunk_time = cur_time - self._chunk_rate
-            return await self.get_chunk()
-        else:
-            delta = cur_time - self._last_chunk_time
-            if delta < self._chunk_rate:
-                await asyncio.sleep(delta)
-                return await self.get_chunk()
-            else:
-                sample_cnt = int(delta * self._sample_rate)
-                chunk = self.gen_sample(self._last_chunk_time, sample_cnt)
-                self._last_chunk_time = time.time()
-                return chunk
-
-    def gen_sample(self, start_time, sample_cnt):
-        pass
-
-
-class SilentAudioSource(GeneratedAudioSource):
-    def gen_sample(self, start_time, sample_cnt):
-        sample = b'\0\0' * sample_cnt
-        return audio.AudioChunk(start_time=start_time, audio=sample,
-                                width=2, freq=self._sample_rate)
 
 
 class SilentSourceTestCase(base.TestCase):
     async def test_get_chunk_audio(self):
-        a_s = SilentAudioSource()
+        a_s = audio_fakes.SilentAudioSource()
         chunk = await a_s.get_chunk()
         sample = b'\0\0' * 1600
 
@@ -53,7 +20,7 @@ class SilentSourceTestCase(base.TestCase):
         self.assertEqual(b'\0' * len(chunk.audio), chunk.audio)
 
     async def test_get_chunk_delay(self):
-        a_s = SilentAudioSource()
+        a_s = audio_fakes.SilentAudioSource()
         start_time = time.time()
 
         await a_s.get_chunk()
@@ -103,13 +70,14 @@ class WaveSourceTestCase(base.TestCase):
 
 class SquelchedSourceTestCase(base.TestCase):
     async def test_detect_silent_level(self):
-        a_s = audio.SquelchedSource(SilentAudioSource())
+        a_s = audio.SquelchedSource(audio_fakes.SilentAudioSource())
         level = await a_s.detect_squelch_level(detect_time=.2)
         self.assertEqual(level, a_s.squelch_level)
         self.assertEqual(0, level)
 
     async def test_get_silent_chunk(self):
-        a_s = audio.SquelchedSource(SilentAudioSource(), squelch_level=0)
+        a_s = audio.SquelchedSource(audio_fakes.SilentAudioSource(),
+                                    squelch_level=0)
         async with a_s.listen():
             with self.assertRaises(asyncio.TimeoutError):
                 await asyncio.wait_for(a_s.get_chunk(), .2)

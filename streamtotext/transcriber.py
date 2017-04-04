@@ -13,6 +13,13 @@ import websockets
 from streamtotext import audio
 
 
+class AlreadyRunningError(Exception):
+    def __init__(self):
+        super(AlreadyRunningError, self).__init__(
+            'Object started when it is already running'
+        )
+
+
 class TranscribeResult(object):
     def __init__(self, transcript, confidence=None):
         self.transcript = transcript
@@ -41,28 +48,6 @@ class GoogleTranscribeEvent(TranscribeEvent):
         self.stability = stability
 
 
-class EventGenerator(object):
-    """Asynchronously yield transcription events from a transcriber
-
-    This generator will await :func:`Transcriber.next_event` and continuously
-    yield :class:`TranscribeEvent` until none are left.
-
-    :param transcriber: Transcriber to await upon.
-    :type transcriber: Transcriber
-    """
-    def __init__(self, transcriber):
-        self._transcriber = transcriber
-
-    async def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        ev = await self._transcriber.next_event()
-        if ev is None:
-            raise StopAsyncIteration
-        return ev
-
-
 class Transcriber(object):
     """Base class for implementing a transcriber.
 
@@ -76,41 +61,50 @@ class Transcriber(object):
         self._source = source
         self.running = False
         self._stopped_running = asyncio.Event()
-
-    @property
-    def events(self):
-        return EventGenerator(self)
-
-    async def next_event(self):
-        return None
+        self._ev_handlers = []
 
     async def _start(self):
-        self.running = True
-        self._stopped_running.clear()
+        if not self.running:
+            self.running = True
+            self._stopped_running.clear()
+        else:
+            raise AlreadyRunningError()
 
     async def transcribe(self):
         await self._start()
+        try:
+            await asyncio.wait([self._handle_audio(), self._read_events()])
+        finally:
+            self._stopped_running.set()
+            await self.stop()
+
+    async def stop(self, wait=True):
+        if self.running:
+            self.running = False
+        if wait:
+            await self._stopped_running.wait()
+
+    def register_event_handler(self, handler):
+        self._ev_handlers.append(handler)
+
+    async def _handle_event(self, event):
+        for handler in self._ev_handlers:
+            await handler(event)
+
+    async def _handle_audio(self):
         async with self._source.listen():
-            try:
-                while self.running:
+            while self.running:
+                try:
                     await self._send_chunk(await self._source.get_chunk())
-            except audio.NoMoreChunksError:
-                await self._send_complete()
-
-    async def send_complete(self):
-        pass
-
-    async def stop(self):
-        self.running = False
-        self._stopped_running.set()
+                except audio.NoMoreChunksError:
+                    break
 
 
 class WatsonStartError(Exception):
     def __init__(self, msg):
-        self._msg = msg
-
-    def __str__(self):
-        return 'Connection start failure. Got: %s' % self.msg
+        super(WatsonStartError, self).__init__(
+            'Connection start failure. Got: %s' % msg
+        )
 
 
 class WatsonTranscriber(Transcriber):
@@ -137,9 +131,10 @@ class WatsonTranscriber(Transcriber):
         await self._send_start(self._ws, self._source_freq)
         await super(WatsonTranscriber, self)._start()
 
-    async def stop(self):
+    async def stop(self, wait=True):
+        await self._send_complete()
         self._ws.close()
-        await super(WatsonTranscriber, self).stop()
+        await super(WatsonTranscriber, self).stop(wait)
 
     async def _send_start(self, ws, rate):
         start_data = {
@@ -162,13 +157,15 @@ class WatsonTranscriber(Transcriber):
     async def _send_complete(self):
         await self._ws.send(json.dumps({'action': 'stop'}))
 
-    async def next_event(self):
-        if self._ws is not None:
-            read = await self._ws.recv()
+    async def _read_events(self):
+        while self.running:
+            try:
+                read = await self._ws.recv()
+            except websockets.exceptions.ConnectionClosed as e:
+                break
             msg = json.loads(read)
-            return self._msg_to_event(msg)
-        else:
-            return None
+            ev = self._msg_to_event(msg)
+            await self._handle_event(ev)
 
     def _to_auth_header(self, user, passwd):
         seed = ':'.join((user, passwd))
