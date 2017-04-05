@@ -35,4 +35,4 @@ streamtotext requires python3.5 or higher and can be installed using pip.
   pip install -U .
 
 
-.. _`documentation`:http://streamtotext.readthedocs.io/en/latest/index.html 
+.. _`documentation`: http://streamtotext.readthedocs.io/en/latest/index.html 
