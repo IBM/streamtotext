@@ -29,7 +29,7 @@ streamtotext requires python3.5 or higher and can be installed using pip.
 
 .. code-block :: bash
 
-  git clone https://github.com/greghaynes/streamtotext
+  git clone https://github.com/ibm-dev/streamtotext
   cd streamtotext
   pip install -U .
 
