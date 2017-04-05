@@ -13,7 +13,11 @@ import time
 import wave
 
 import janus
-import pyaudio
+try:
+    import pyaudio
+except ImportError:
+    # This is a workaround for doc generation where pyaudio cannot be installed
+    pass
 
 
 class NoMoreChunksError(Exception):
