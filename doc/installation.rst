@@ -12,3 +12,5 @@ Requirements
 ------------
 
 Currently ``streamtotext`` requires a minimum Python version of 3.5.
+Additional python dependencies are listed in ``requirements.txt`` and will
+be installed automatically by ``pip``.
