@@ -4,7 +4,7 @@ streamtotext
 
 A pluggable streaming transcription pipleline for Python.
 
-More information can be found in the `documentation`.
+More information can be found in the `documentation`_.
 
 Overview
 ========
