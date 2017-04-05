@@ -39,6 +39,10 @@ that allows for highly customizable audio sources (e.g.  squelched microphone)
 and transcription methods (e.g. local trigger before remote service).
 
 
+.. include:: demo.rst
+
+
+
 Additional Information
 ======================
 
