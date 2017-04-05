@@ -4,6 +4,7 @@ streamtotext
 
 A pluggable streaming transcription pipleline for Python.
 
+More information can be found in the `documentation`.
 
 Overview
 ========
@@ -34,22 +35,4 @@ streamtotext requires python3.5 or higher and can be installed using pip.
   pip install -U .
 
 
-Usage (demo application)
-========================
-
-Although streamtotext is intended as a library for application developers,
-it comes with a demo application for testing some of its features.
-
-
-After installation you can run:
-
-.. code-block :: bash
-
-  streamtotext transcribe watson
-
-
-This will start up by detecting the noise level of your microphone. Speak
-in to it at a normal level. Once this completes it will automatically
-send any voice samples to the transcription service specified.
-
-NOTE: This is not yet completed and for now it only displays debug info.
+.. _`documentation`:http://streamtotext.readthedocs.io/en/latest/index.html 
