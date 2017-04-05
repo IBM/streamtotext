@@ -259,7 +259,7 @@ class AudioSourceProcessor(AudioSource):
 class Microphone(AudioSource):
     """Use a local microphone as an audio source.
 
-    :parameter audio_format: Sample format
+    :parameter audio_format: Sample format, default paInt16
     :type audio: PyAudio format
     :parameter channels: Number of channels in microphone.
     :type channels: int
@@ -269,11 +269,12 @@ class Microphone(AudioSource):
     :type device_ndx: int
     """
     def __init__(self,
-                 audio_format=pyaudio.paInt16,
+                 audio_format=None,
                  channels=1,
                  rate=16000,
                  device_ndx=0):
         super(Microphone, self).__init__()
+        audio_format = audio_format or pyaudio.paInt16
         self._format = audio_format
         self._channels = channels
         self._rate = rate
