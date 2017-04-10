@@ -79,7 +79,7 @@ def transcribe(args):
     if service == 'watson':
         username = os.environ.get('WATSON_SST_USER') or args.username
         password = os.environ.get('WATSON_SST_PASSWORD') or args.password
-        
+
         if not username:
             exit(error='You must specify a username.')
         if not password:
