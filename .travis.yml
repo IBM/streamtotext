@@ -2,4 +2,7 @@ language: python
 python:
   - "3.5"
   - "3.6"
-script: tox
+install:
+  - sudo apt-get install portaudio19-dev
+  - pip install -U tox setuptools pbr
+script: tox -e $(echo py$TRAVIS_PYTHON_VERSION | tr -d .)
