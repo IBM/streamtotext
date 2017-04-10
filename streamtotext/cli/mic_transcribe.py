@@ -34,6 +34,11 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
+def exit(error):
+    print("ERROR: %s" % error, file=sys.stderr)
+    sys.exit(1)
+
+
 async def handle_transcribe_event(ev):
     print(ev)
 
@@ -63,6 +68,11 @@ def transcribe(args):
     if service == 'watson':
         username = os.environ.get('WATSON_SST_USER') or args.username
         password = os.environ.get('WATSON_SST_PASSWORD') or args.password
+        
+        if not username:
+            exit(error='You must specify a username.')
+        if not password:
+            exit(error='You must specify a password.')
         transcribe_watson(src, args.frequency, username, password)
 
 
