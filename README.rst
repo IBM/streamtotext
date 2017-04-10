@@ -2,6 +2,8 @@
 streamtotext
 ============
 
+|build-status| |docs|
+
 A pluggable streaming transcription pipleline for Python.
 
 More information can be found in the `documentation`_.
@@ -36,3 +38,11 @@ streamtotext requires python3.5 or higher and can be installed using pip.
 
 
 .. _`documentation`: http://streamtotext.readthedocs.io/en/latest/index.html 
+.. |build-status| image:: https://travis-ci.org/ibm-dev/streamtotext.svg?branch=master
+    :alt: Build Status
+    :scale: 100%
+    :target: https://travis-ci.org/ibm-dev/streamtotext
+.. |docs| image:: https://readthedocs.org/projects/streamtotext/badge/?version=latest
+    :alt: Documentation
+    :scale: 100%
+    :target: https://streamtotext.readthedocs.io/
