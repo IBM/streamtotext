@@ -31,6 +31,9 @@ def parse_args(argv):
     parser.add_argument('-d', '--device-index',
                         help='Device index for mic',
                         type=int)
+    parser.add_argument('-S', '--no-squelch',
+                        help='Send audio when mic is quiet.',
+                        action='store_true')
     return parser.parse_args(argv)
 
 
@@ -51,18 +54,26 @@ def get_audio_source(channels, frequency, device_ndx=None):
     return mic
 
 
-def transcribe_watson(src, src_freq, username, password):
+def transcribe_watson(loop, src, src_freq, username, password):
     ts = transcriber.WatsonTranscriber(src, src_freq,
                                        user=username, password=password)
     ts.register_event_handler(handle_transcribe_event)
 
-    loop = asyncio.get_event_loop()
     loop.run_until_complete(ts.transcribe())
 
 
 def transcribe(args):
+    loop = asyncio.get_event_loop()
+
     src = get_audio_source(args.channels, args.frequency,
                            args.device_index)
+
+    if not args.no_squelch:
+        src = audio.SquelchedSource(src)
+        print('Detecting squelch level.')
+        print('Please talk in to your microphone at a normal volume.')
+        loop.run_until_complete(src.detect_squelch_level())
+        print('Completed detection squelch level.')
 
     service = args.transcription_service
     if service == 'watson':
@@ -73,7 +84,9 @@ def transcribe(args):
             exit(error='You must specify a username.')
         if not password:
             exit(error='You must specify a password.')
-        transcribe_watson(src, args.frequency, username, password)
+
+        print('Beginning transcription.')
+        transcribe_watson(loop, src, args.frequency, username, password)
 
 
 def main():
