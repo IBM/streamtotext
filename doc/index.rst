@@ -49,4 +49,5 @@ Additional Information
 .. toctree::
    :maxdepth: 1
 
+   Examples <examples>
    API Documentation <api/streamtotext>
