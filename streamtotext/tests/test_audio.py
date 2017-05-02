@@ -33,6 +33,15 @@ class SilentSourceTestCase(base.TestCase):
         self.assertAlmostEqual(start_time + .2, time.time(), delta=.2)
 
 
+class ChunkTestCase(base.TestCase):
+    async def test_split_join_chunk(self):
+        chunk_audio = bytes(range(100))
+        chunk = audio.AudioChunk(time.time(), chunk_audio, 2, 16000)
+        left_chunk, right_chunk = audio.split_chunk(chunk, 20)
+        cmp_chunk = audio.merge_chunks((left_chunk, right_chunk))
+        self.assertEqual(chunk, cmp_chunk)
+
+
 class EvenChunkIteratorTestCase(base.TestCase):
     async def test_uneven_chunks(self):
         audio1 = b'\0\0' * 160
@@ -44,6 +53,15 @@ class EvenChunkIteratorTestCase(base.TestCase):
 
         for chunk in audio.EvenChunkIterator(iter(chunks), 100):
             self.assertEqual(200, len(chunk.audio))
+
+    async def test_large_chunk(self):
+        chunk_audio = bytes(range(100))
+        large_chunk = audio.AudioChunk(time.time(), chunk_audio, 2, 16000)
+        chunks = []
+        for chunk in audio.EvenChunkIterator(iter((large_chunk,)), 10):
+            chunks.append(chunk)
+        self.assertEqual(5, len(chunks))
+        self.assertEqual(large_chunk, audio.merge_chunks(chunks))
 
 
 class WaveSourceTestCase(base.TestCase):

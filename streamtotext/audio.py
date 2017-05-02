@@ -74,7 +74,7 @@ def merge_chunks(chunks):
 
 def split_chunk(chunk, sample_offset):
     offset = int(sample_offset * chunk.width)
-    first_audio = memoryview(chunk.audio)[:-offset]
+    first_audio = memoryview(chunk.audio)[:offset]
     second_audio = memoryview(chunk.audio)[offset:]
     first_chunk = AudioChunk(
         chunk.start_time, first_audio, chunk.width, chunk.freq
@@ -90,6 +90,8 @@ class EvenChunkIterator(object):
 
     :parameter iterator: Iterator over audio chunks.
     :type iterator: Iterator
+    :parameter chunk_size: Number of samples in resulting chunks
+    :type chunk_size: int
     """
     def __init__(self, iterator, chunk_size):
         self._iterator = iterator
@@ -108,18 +110,15 @@ class EvenChunkIterator(object):
             self._cur_chunk = None
             cur_chunk_size = chunk_sample_cnt(chunk)
             ret_chunk_size += cur_chunk_size
+            sample_queue.append(chunk)
 
-            if ret_chunk_size < self._chunk_size:
-                # We need more chunks, append to the sample queue and grab next
-                sample_queue.append(chunk)
-            elif ret_chunk_size == self._chunk_size:
-                sample_queue.append(chunk)
-            else:
+            if ret_chunk_size > self._chunk_size:
                 # We need to break up the chunk
-                overshoot = ret_chunk_size - self._chunk_size
-                ret_chunk, leftover_chunk = split_chunk(chunk, overshoot)
-                sample_queue.append(ret_chunk)
+                merged_chunk = merge_chunks(sample_queue)
+                ret_chunk, leftover_chunk = split_chunk(merged_chunk,
+                                                        self._chunk_size)
                 self._cur_chunk = leftover_chunk
+                return ret_chunk
 
         return merge_chunks(sample_queue)
 
@@ -135,18 +134,15 @@ class EvenChunkIterator(object):
             self._cur_chunk = None
             cur_chunk_size = chunk_sample_cnt(chunk)
             ret_chunk_size += cur_chunk_size
+            sample_queue.append(chunk)
 
-            if ret_chunk_size < self._chunk_size:
-                # We need more chunks, append to the sample queue and grab next
-                sample_queue.append(chunk)
-            elif ret_chunk_size == self._chunk_size:
-                sample_queue.append(chunk)
-            else:
+            if ret_chunk_size > self._chunk_size:
                 # We need to break up the chunk
-                overshoot = ret_chunk_size - self._chunk_size
-                ret_chunk, leftover_chunk = split_chunk(chunk, overshoot)
-                sample_queue.append(ret_chunk)
+                merged_chunk = merge_chunks(sample_queue)
+                ret_chunk, leftover_chunk = split_chunk(merged_chunk,
+                                                        self._chunk_size)
                 self._cur_chunk = leftover_chunk
+                return ret_chunk
 
         return merge_chunks(sample_queue)
 
