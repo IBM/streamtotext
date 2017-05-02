@@ -1,3 +1,4 @@
 pyaudio
 janus
+pocketsphinx
 websockets
