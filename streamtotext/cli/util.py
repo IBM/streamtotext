@@ -54,8 +54,9 @@ def cmd_play(args):
     loop = asyncio.get_event_loop()
 
     wav = hello_wave_source()
-    squelched = audio.SquelchedSource(wav, squelch_level=500)
-    player = audio.AudioPlayer(squelched, 2, 1, 44100)
+    sq_wav = audio.SquelchedSource(wav, squelch_level=200)
+    conv_wav = audio.RateConvert(sq_wav, 1, 16000)
+    player = audio.AudioPlayer(conv_wav, 2, 1, 16000)
     loop.run_until_complete(player.play())
 
 

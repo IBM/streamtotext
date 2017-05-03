@@ -1,8 +1,9 @@
+dist: trusty
 language: python
 python:
   - "3.5"
   - "3.6"
 install:
-  - sudo apt-get install portaudio19-dev
+  - sudo apt-get install portaudio19-dev swig libpocketsphinx-dev libpulse-dev
   - pip install -U tox setuptools pbr
 script: tox -e $(echo py$TRAVIS_PYTHON_VERSION | tr -d .)

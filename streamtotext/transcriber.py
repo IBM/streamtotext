@@ -6,8 +6,11 @@ The main base class which is responsible for performing transcription is
 
 import asyncio
 import base64
+from contextlib import contextmanager
 import json
+import os
 
+import pocketsphinx
 import websockets
 
 from streamtotext import audio
@@ -73,14 +76,18 @@ class Transcriber(object):
     async def transcribe(self):
         await self._start()
         try:
-            done, pending = await asyncio.wait(
-                [self._handle_audio(), self._read_events()],
-                return_when=asyncio.FIRST_EXCEPTION
-            )
-            for fut in done:
-                exc = fut.exception()
-                if exc:
-                    raise exc
+            while True:
+                done, pending = await asyncio.wait(
+                    [self._handle_audio(), self._read_events()],
+                    return_when=asyncio.FIRST_EXCEPTION
+                )
+                for fut in done:
+                    exc = fut.exception()
+                    if exc:
+                        raise exc
+
+                if not pending:
+                    break
         finally:
             self._stopped_running.set()
             await self.stop()
@@ -189,5 +196,46 @@ class WatsonTranscriber(Transcriber):
         return TranscribeEvent(t_rs, msg.get('final', False))
 
 
-class GoogleTranscriber(Transcriber):
-    pass
+class PocketSphinxTranscriber(Transcriber):
+    def __init__(self, source, hmm_path, lm_path, dict_path):
+        super(PocketSphinxTranscriber, self).__init__(source)
+        self._decoder = None
+        self.hmm_path = hmm_path
+        self.lm_path = lm_path
+        self.dict_path = dict_path
+
+    @staticmethod
+    def default_config(source, model_dir=None):
+        model_dir = model_dir or '/usr/share/pocketsphinx/model/'
+        hmm_path = os.path.join(model_dir, 'en-us/en-us')
+        lm_path = os.path.join(model_dir, 'en-us/en-us.lm.bin')
+        dict_path = os.path.join(model_dir, 'en-us/cmudict-en-us.dict')
+        return PocketSphinxTranscriber(source, hmm_path, lm_path, dict_path)
+
+    @contextmanager
+    def utterance(self):
+        self._decoder.start_utt()
+        yield
+        self._decoder.end_utt()
+
+    async def _start(self):
+        config = pocketsphinx.Decoder.default_config()
+        config.set_string('-hmm', self.hmm_path)
+        config.set_string('-lm', self.lm_path)
+        config.set_string('-dict', self.dict_path)
+        self._decoder = pocketsphinx.Decoder(config)
+        await super(PocketSphinxTranscriber, self)._start()
+
+    async def stop(self, wait=True):
+        await super(PocketSphinxTranscriber, self).stop(wait)
+        self._decoder = None
+
+    async def _send_chunk(self, audio_chunk):
+        with self.utterance():
+            self._decoder.process_raw(audio_chunk.audio, False, False)
+        hyp = self._decoder.hyp()
+        res = TranscribeResult(hyp.hypstr)
+        await self._handle_event(TranscribeEvent((res,), True))
+
+    async def _read_events(self):
+        pass

@@ -320,7 +320,7 @@ class WaveSource(AudioSource):
     :parameter chunk_frames: Chunk size to return from get_chunk
     :type chunk_frames: int
     """
-    def __init__(self, wave_path, chunk_frames=1000):
+    def __init__(self, wave_path, chunk_frames=None):
         self._wave_path = wave_path
         self._chunk_frames = chunk_frames
         self._wave_fp = None
@@ -341,7 +341,8 @@ class WaveSource(AudioSource):
         await super(WaveSource, self).stop()
 
     async def get_chunk(self):
-        frames = self._wave_fp.readframes(self._chunk_frames)
+        frame_cnt = self._chunk_frames or self._wave_fp.getnframes()
+        frames = self._wave_fp.readframes(frame_cnt)
         if self._channels == 2:
             frames = audioop.tomono(frames, self._width, .5, .5)
         if len(frames) == 0:
@@ -351,16 +352,37 @@ class WaveSource(AudioSource):
         return chunk
 
 
-class RateConvert(AudioSource):
-    def __init__(self, source, n_channels, in_rate, out_rate):
+class RateConvert(AudioSourceProcessor):
+    def __init__(self, source, n_channels, out_rate):
         super(RateConvert, self).__init__(source)
         self._n_channels = n_channels
-        self._in_rate = in_rate
         self._out_rate = out_rate
+        self._state = None
 
     async def get_chunk(self):
         chunk = await self._source.get_chunk()
-        return chunk
+        new_aud, self._state = audioop.ratecv(chunk.audio, 2, self._n_channels,
+                                              chunk.freq, self._out_rate,
+                                              self._state)
+        return AudioChunk(chunk.start_time, new_aud, 2, self._out_rate)
+
+
+class Bulkify(AudioSourceProcessor):
+    """Read in an :class:`AudioSource` and convert it in to a single chunk.
+
+    This is useful for passing audio to a non-streaming transcriber.
+    """
+    async def get_chunk(self):
+        chunks = []
+        try:
+            while True:
+                chunks.append(await self._source.get_chunk())
+        except NoMoreChunksError:
+            if not chunks:
+                raise
+
+        if chunks:
+            return merge_chunks(chunks)
 
 
 class SquelchedSource(AudioSourceProcessor):
