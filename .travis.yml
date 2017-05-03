@@ -4,6 +4,6 @@ python:
   - "3.5"
   - "3.6"
 install:
-  - sudo apt-get install portaudio19-dev swig libpocketsphinx3 pocketsphinx-en-us
+  - sudo apt-get install portaudio19-dev swig libpocketsphinx-dev
   - pip install -U tox setuptools pbr
 script: tox -e $(echo py$TRAVIS_PYTHON_VERSION | tr -d .)
