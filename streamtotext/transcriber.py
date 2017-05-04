@@ -197,6 +197,17 @@ class WatsonTranscriber(Transcriber):
 
 
 class PocketSphinxTranscriber(Transcriber):
+    """Local transcriber which uses pocketsphinx.
+
+    Note: This transcriber does not support streaming. The audio source
+    needs to emit events in bulk. See `Bulk Transcription`_ for more
+    information.
+
+    :parameter source: Input audio source
+    :type source: audio.AudioSource
+
+    .. _Bulk Transcription: ../bulk.html
+    """
     def __init__(self, source, hmm_path, lm_path, dict_path):
         super(PocketSphinxTranscriber, self).__init__(source)
         self._decoder = None
