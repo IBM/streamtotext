@@ -226,6 +226,10 @@ class AudioSource(object):
         pass
 
 
+class BulkAudioSource(AudioSource):
+    pass
+
+
 class AudioSourceProcessor(AudioSource):
     """Base class for being a pipeline processor of an class:`AudioSource`
 
@@ -250,6 +254,10 @@ class AudioSourceProcessor(AudioSource):
         """
         await self._source.stop()
         await super(AudioSourceProcessor, self).stop()
+
+
+class BulkAudioSourceProcessor(AudioSourceProcessor):
+    pass
 
 
 class Microphone(AudioSource):
@@ -367,7 +375,7 @@ class RateConvert(AudioSourceProcessor):
         return AudioChunk(chunk.start_time, new_aud, 2, self._out_rate)
 
 
-class Bulkify(AudioSourceProcessor):
+class Bulkify(BulkAudioSourceProcessor):
     """Read in an :class:`AudioSource` and convert it in to a single chunk.
 
     This is useful for passing audio to a non-streaming transcriber.
