@@ -13,7 +13,7 @@ def transcribe_wav_file(path, watson_user, watson_pass):
     wav_src = audio.WaveSource(path)
 
     # Resample the audio to 16000hz which is what pocketsphinx expects
-    cv_wav = audio.RateConvert(sq_wav, 1, 16000)
+    cv_wav = audio.RateConvert(wav_src, 1, 16000)
 
     # Bulkify the wav audio source. See `Bulk Transcription` doc.
     bulk_wav = audio.Bulkify(cv_wav)

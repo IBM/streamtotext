@@ -120,7 +120,7 @@ class SquelchedSourceTestCase(base.TestCase):
         )
         wav = audio.WaveSource(path, chunk_frames=1000)
         a_s = audio.SquelchedSource(wav, squelch_level=500, blockify=True)
-        
+
         chunks = []
         async with a_s.listen():
             async for chunk in a_s.chunks:
