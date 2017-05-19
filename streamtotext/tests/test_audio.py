@@ -112,3 +112,18 @@ class SquelchedSourceTestCase(base.TestCase):
         async with a_s.listen():
             async for chunk in a_s.chunks:
                 chunks.append(chunk)
+
+    async def test_hello_44100_get_blockified_chunk(self):
+        path = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/hello_44100.wav'
+        )
+        wav = audio.WaveSource(path, chunk_frames=1000)
+        a_s = audio.SquelchedSource(wav, squelch_level=500, blockify=True)
+
+        chunks = []
+        async with a_s.listen():
+            async for chunk in a_s.chunks:
+                chunks.append(chunk)
+
+        self.assertEqual(1, len(chunks))

@@ -415,12 +415,13 @@ class SquelchedSource(AudioSourceProcessor):
     :type prefix_samples: int
     """
     def __init__(self, source, sample_size=1600, squelch_level=None,
-                 prefix_samples=2):
+                 prefix_samples=2, blockify=False):
         super(SquelchedSource, self).__init__(source)
         self._recent_chunks = collections.deque(maxlen=prefix_samples)
         self._sample_size = sample_size
         self.squelch_level = squelch_level
         self._prefix_samples = prefix_samples
+        self.blockify = blockify
         self._sample_width = 2
         self._squelch_triggered = False
         self._even_iter = EvenChunkIterator(self._source.chunks,
@@ -451,6 +452,7 @@ class SquelchedSource(AudioSourceProcessor):
         await super(SquelchedSource, self).start()
 
     async def get_chunk(self):
+        blockify_chunks = []
         while True:
             try:
                 chunk = await self._even_iter.__anext__()
@@ -466,9 +468,17 @@ class SquelchedSource(AudioSourceProcessor):
             )
             if self._squelch_triggered:
                 if not was_triggered:
-                    return merge_chunks(self._recent_chunks)
+                    if self.blockify:
+                        blockify_chunks.extend(self._recent_chunks)
+                    else:
+                        return merge_chunks(self._recent_chunks)
                 else:
-                    return chunk
+                    if self.blockify:
+                        blockify_chunks.append(chunk)
+                    else:
+                        return chunk
+            elif was_triggered and self.blockify:
+                return merge_chunks(blockify_chunks)
 
     def check_squelch(self, level, is_triggered, chunks):
         rms_vals = [audioop.rms(x.audio, x.width) for x in chunks]
