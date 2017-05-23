@@ -13,8 +13,6 @@ import os
 import pocketsphinx
 import websockets
 
-from streamtotext import audio
-
 
 class AlreadyRunningError(Exception):
     def __init__(self):
@@ -76,10 +74,14 @@ class Transcriber(object):
     async def transcribe(self):
         await self._start()
         try:
-            while True:
+            audio_task = asyncio.ensure_future(self._handle_audio())
+            read_task = asyncio.ensure_future(self._read_events())
+            while self.running:
+                waits = [task for task in (audio_task, read_task)
+                         if not task.done()]
                 done, pending = await asyncio.wait(
-                    [self._handle_audio(), self._read_events()],
-                    return_when=asyncio.FIRST_EXCEPTION
+                    waits,
+                    return_when=asyncio.FIRST_COMPLETED
                 )
                 for fut in done:
                     exc = fut.exception()
@@ -88,6 +90,8 @@ class Transcriber(object):
 
                 if not pending:
                     break
+            audio_task.cancel()
+            read_task.cancel()
         finally:
             self._stopped_running.set()
             await self.stop()
@@ -108,10 +112,8 @@ class Transcriber(object):
     async def _handle_audio(self):
         async with self._source.listen():
             while self.running:
-                try:
-                    await self._send_chunk(await self._source.get_chunk())
-                except audio.NoMoreChunksError:
-                    break
+                async for block in self._source:
+                    await self._handle_audio_block(block)
 
 
 class WatsonStartError(Exception):
@@ -164,6 +166,10 @@ class WatsonTranscriber(Transcriber):
         msg = json.loads(await ws.recv())
         if msg.get('state') != 'listening':
             raise WatsonStartError(msg)
+
+    async def _handle_audio_block(self, block):
+        async for chunk in block:
+            await self._send_chunk(chunk)
 
     async def _send_chunk(self, audio_chunk):
         await self._ws.send(audio_chunk.audio)
@@ -241,9 +247,10 @@ class PocketSphinxTranscriber(Transcriber):
         await super(PocketSphinxTranscriber, self).stop(wait)
         self._decoder = None
 
-    async def _send_chunk(self, audio_chunk):
+    async def _handle_audio_block(self, block):
         with self.utterance():
-            self._decoder.process_raw(audio_chunk.audio, False, False)
+            async for audio_chunk in block:
+                self._decoder.process_raw(audio_chunk.audio, False, False)
         hyp = self._decoder.hyp()
         res = TranscribeResult(hyp.hypstr)
         await self._handle_event(TranscribeEvent((res,), True))

@@ -51,4 +51,3 @@ Additional Information
 
    Examples <examples>
    API Documentation <api/streamtotext>
-   Bulk Transcription <bulk>

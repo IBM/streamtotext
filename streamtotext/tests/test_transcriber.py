@@ -16,8 +16,9 @@ class FakeTranscriber(transcriber.Transcriber):
         super(FakeTranscriber, self).__init__(source)
         self._ev_queue = asyncio.Queue()
 
-    async def _send_chunk(self, chunk):
-        pass
+    async def _handle_audio_block(self, block):
+        async for chunk in block:  # NOQA
+            pass
 
     async def _read_events(self):
         await self._handle_event(None)
@@ -113,9 +114,8 @@ class PocketSphinxTranscriberTestCase(base.TestCase):
         wav = audio.WaveSource(hello_path)
         sq_wav = audio.SquelchedSource(wav, squelch_level=200)
         cv_wav = audio.RateConvert(sq_wav, 1, 16000)
-        bulk_wav = audio.Bulkify(cv_wav)
         ts = transcriber.PocketSphinxTranscriber.default_config(
-            bulk_wav
+            cv_wav
         )
         handler = EvHandler(ts)
         ts.register_event_handler(handler.handle)
