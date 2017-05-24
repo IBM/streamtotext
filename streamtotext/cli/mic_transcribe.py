@@ -69,10 +69,10 @@ def transcribe(args):
                            args.device_index)
 
     if not args.no_squelch:
-        src = audio.SquelchedSource(src)
+        src = audio.SquelchedSource(src, squelch_level=100)
         print('Detecting squelch level.')
         print('Please talk in to your microphone at a normal volume.')
-        loop.run_until_complete(src.detect_squelch_level())
+        #loop.run_until_complete(src.detect_squelch_level())
         print('Completed detection squelch level.')
 
     service = args.transcription_service

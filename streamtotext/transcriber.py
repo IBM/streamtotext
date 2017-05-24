@@ -172,7 +172,7 @@ class WatsonTranscriber(Transcriber):
             await self._send_chunk(chunk)
 
     async def _send_chunk(self, audio_chunk):
-        await self._ws.send(audio_chunk.audio)
+        await self._ws.send(bytes(audio_chunk.audio))
 
     async def _send_complete(self):
         await self._ws.send(json.dumps({'action': 'stop'}))

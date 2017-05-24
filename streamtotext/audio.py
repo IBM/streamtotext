@@ -100,10 +100,10 @@ class AudioBlock(object):
 class QueueAudioBlock(AudioBlock):
     def __init__(self, queue=None):
         self._q = queue or asyncio.Queue()
-        super(QueueAudioBlock, self).__init__(self._q)
+        super(QueueAudioBlock, self).__init__()
 
     async def _next_chunk(self):
-        chunk = await self._queue.get()
+        chunk = await self._q.get()
         if chunk is None:
             raise StopAsyncIteration('No more audio chunks')
         return chunk
@@ -322,14 +322,14 @@ class Microphone(AudioSource):
         )
 
     async def stop(self):
-        await self._stream_queue.put(None)
+        await self._stream_queue.async_q.put(None)
         await super(Microphone, self).stop()
         self._stream.stop_stream()
         self._stream.close()
         self._pyaudio.terminate()
 
     async def _next_block(self):
-        return QueueAudioBlock(self._stream_queue)
+        return QueueAudioBlock(self._stream_queue.async_q)
 
     def _stream_callback(self, in_data, frame_count,
                          time_info, status_flags):
@@ -503,6 +503,8 @@ class SquelchedSource(AudioSourceProcessor):
         audio_chunks = collections.deque()
         async with self._source.listen():
             async for block in self._source:
+                if time.time() > end_time:
+                    break
                 even_iter = EvenChunkIterator(block, self._sample_size)
                 try:
                     while time.time() < end_time:
