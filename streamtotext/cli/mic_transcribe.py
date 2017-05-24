@@ -13,7 +13,7 @@ def parse_args(argv):
     parser.add_argument('transcription_service',
                         help='Name of transcription service to use.',
                         type=str,
-                        choices=['watson', 'google'])
+                        choices=['watson', 'pocketsphinx'])
     parser.add_argument('-u', '--username',
                         help='Username for service account (if applicable).',
                         type=str)
@@ -54,14 +54,6 @@ def get_audio_source(channels, frequency, device_ndx=None):
     return mic
 
 
-def transcribe_watson(loop, src, src_freq, username, password):
-    ts = transcriber.WatsonTranscriber(src, src_freq,
-                                       user=username, password=password)
-    ts.register_event_handler(handle_transcribe_event)
-
-    loop.run_until_complete(ts.transcribe())
-
-
 def transcribe(args):
     loop = asyncio.get_event_loop()
 
@@ -75,6 +67,7 @@ def transcribe(args):
         #loop.run_until_complete(src.detect_squelch_level())
         print('Completed detection squelch level.')
 
+    ts = None
     service = args.transcription_service
     if service == 'watson':
         username = os.environ.get('WATSON_SST_USER') or args.username
@@ -86,7 +79,19 @@ def transcribe(args):
             exit(error='You must specify a password.')
 
         print('Beginning transcription.')
-        transcribe_watson(loop, src, args.frequency, username, password)
+        ts = transcriber.WatsonTranscriber(
+            src,
+            args.frequency,
+            user=username,
+            password=password
+        )
+    elif service == 'pocketsphinx':
+        ts = transcriber.PocketSphinxTranscriber.default_config(src)
+    else:
+        raise RuntimeError('Invalid service')
+
+    ts.register_event_handler(handle_transcribe_event)
+    loop.run_until_complete(ts.transcribe())
 
 
 def main():
