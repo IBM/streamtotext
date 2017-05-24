@@ -259,6 +259,7 @@ class AudioSourceProcessor(AudioSource):
     :type source: AudioSource
     """
     def __init__(self, source):
+        super(AudioSourceProcessor, self).__init__()
         self._source = source
 
     async def start(self):
@@ -560,8 +561,9 @@ class AudioPlayer(object):
                         output=True)
 
         async with self._source.listen():
-            async for chunk in self._source.chunks:
-                stream.write(chunk.audio)
+            async for block in self._source:
+                async for chunk in block:
+                    stream.write(chunk.audio)
 
         stream.stop_stream()
         stream.close()
