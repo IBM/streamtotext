@@ -10,8 +10,13 @@ from contextlib import contextmanager
 import json
 import os
 
-import pocketsphinx
 import websockets
+try:
+    import pocketsphinx
+except ImportError:
+    # This is a workaround for doc generation where dep cannot be installed
+    # TODO(greghaynes): Only fail open during doc gen
+    pass
 
 
 class AlreadyRunningError(Exception):

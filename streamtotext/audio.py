@@ -17,6 +17,7 @@ try:
     import pyaudio
 except ImportError:
     # This is a workaround for doc generation where pyaudio cannot be installed
+    # TODO(greghaynes): Only fail open during doc gen
     pass
 
 
@@ -54,7 +55,7 @@ namedtuple.
 
 
 class AudioBlock(object):
-    """An iterator over :class:`AudioChunk`s.
+    """An iterator over :class:`AudioChunk`.
 
     Blocks are used to deliniate continuous chunks of audio. As an example,
     when using the :class:`SquelchedSource` audio source a consumer often
@@ -198,9 +199,7 @@ class AudioSource(object):
     All classes which provide audio in some form implement this class.
     Audio is obtained by first entering the :func:`listen` context manager
     and then iterating over the :class:`AudioSource` to obtain
-    :class:`AudioBlock`s.
-    an :class:`AudioChunk`.
-
+    :class:`AudioBlock`.
     """
 
     def __init__(self):
@@ -253,7 +252,7 @@ class SingleBlockAudioSource(AudioSource):
 
 
 class AudioSourceProcessor(AudioSource):
-    """Base class for being a pipeline processor of an class:`AudioSource`
+    """Base class for being a pipeline processor of an :class:`AudioSource`
 
     :parameter source: Input source
     :type source: AudioSource

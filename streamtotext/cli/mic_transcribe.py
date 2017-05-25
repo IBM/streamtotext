@@ -34,6 +34,8 @@ def parse_args(argv):
     parser.add_argument('-S', '--no-squelch',
                         help='Send audio when mic is quiet.',
                         action='store_true')
+    parser.add_argument('-s', '--squelch-level',
+                        type=int)
     return parser.parse_args(argv)
 
 
@@ -61,11 +63,15 @@ def transcribe(args):
                            args.device_index)
 
     if not args.no_squelch:
-        src = audio.SquelchedSource(src, squelch_level=100)
-        print('Detecting squelch level.')
-        print('Please talk in to your microphone at a normal volume.')
-        #loop.run_until_complete(src.detect_squelch_level())
-        print('Completed detection squelch level.')
+        squelch_level=None
+        if args.squelch_level:
+            squelch_level = args.squelch_level
+        src = audio.SquelchedSource(src, squelch_level=squelch_level)
+        if not args.squelch_level:
+            print('Detecting squelch level.')
+            print('Please talk in to your microphone at a normal volume.')
+            loop.run_until_complete(src.detect_squelch_level())
+            print('Completed detection squelch level.')
 
     ts = None
     service = args.transcription_service
