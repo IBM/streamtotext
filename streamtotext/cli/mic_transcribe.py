@@ -59,7 +59,7 @@ def get_audio_source(channels, frequency, device_ndx=None):
 async def run_transcription(ts):
     async with ts:
         while True:
-            asyncio.wait(10)
+            await asyncio.sleep(10)
 
 
 def transcribe(args):
