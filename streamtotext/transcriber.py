@@ -26,6 +26,13 @@ class AlreadyRunningError(Exception):
         )
 
 
+class AlreadyStoppedError(Exception):
+    def __init__(self):
+        super(AlreadyRunningError, self).__init__(
+            'Object started when it is already running'
+        )
+
+
 class TranscribeResult(object):
     def __init__(self, transcript, confidence=None):
         self.transcript = transcript
@@ -69,43 +76,28 @@ class Transcriber(object):
         self._stopped_running = asyncio.Event()
         self._ev_handlers = []
 
+    async def __aenter__(self):
+        await self._start()
+        self._audio_task = asyncio.ensure_future(self._handle_audio())
+        self._read_task = asyncio.ensure_future(self._read_events())
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self._audio_task.cancel()
+        self._read_task.cancel()
+        await self._stop()
+
     async def _start(self):
-        if not self.running:
+        if self.running:
+            raise AlreadyRunningError()
+        else:
             self.running = True
             self._stopped_running.clear()
-        else:
-            raise AlreadyRunningError()
 
-    async def transcribe(self):
-        await self._start()
-        try:
-            audio_task = asyncio.ensure_future(self._handle_audio())
-            read_task = asyncio.ensure_future(self._read_events())
-            while self.running:
-                waits = [task for task in (audio_task, read_task)
-                         if not task.done()]
-                done, pending = await asyncio.wait(
-                    waits,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                for fut in done:
-                    exc = fut.exception()
-                    if exc:
-                        raise exc
-
-                if not pending:
-                    break
-            audio_task.cancel()
-            read_task.cancel()
-        finally:
-            self._stopped_running.set()
-            await self.stop()
-
-    async def stop(self, wait=True):
+    async def _stop(self):
         if self.running:
             self.running = False
-        if wait:
-            await self._stopped_running.wait()
+        else:
+            raise AlreadyStoppedError()
 
     def register_event_handler(self, handler):
         self._ev_handlers.append(handler)
@@ -116,9 +108,8 @@ class Transcriber(object):
 
     async def _handle_audio(self):
         async with self._source.listen():
-            while self.running:
-                async for block in self._source:
-                    await self._handle_audio_block(block)
+            async for block in self._source:
+                await self._handle_audio_block(block)
 
 
 class WatsonStartError(Exception):
@@ -152,10 +143,10 @@ class WatsonTranscriber(Transcriber):
         await self._send_start(self._ws, self._source_freq)
         await super(WatsonTranscriber, self)._start()
 
-    async def stop(self, wait=True):
+    async def _stop(self):
         await self._send_complete()
         self._ws.close()
-        await super(WatsonTranscriber, self).stop(wait)
+        await super(WatsonTranscriber, self)._stop()
 
     async def _send_start(self, ws, rate):
         start_data = {
@@ -236,7 +227,10 @@ class PocketSphinxTranscriber(Transcriber):
 
     @contextmanager
     def utterance(self):
-        self._decoder.start_utt()
+        try:
+            self._decoder.start_utt()
+        except AttributeError:
+            pass
         yield
         self._decoder.end_utt()
 
@@ -248,8 +242,8 @@ class PocketSphinxTranscriber(Transcriber):
         self._decoder = pocketsphinx.Decoder(config)
         await super(PocketSphinxTranscriber, self)._start()
 
-    async def stop(self, wait=True):
-        await super(PocketSphinxTranscriber, self).stop(wait)
+    async def _stop(self):
+        await super(PocketSphinxTranscriber, self)._stop()
         self._decoder = None
 
     async def _handle_audio_block(self, block):
@@ -257,8 +251,9 @@ class PocketSphinxTranscriber(Transcriber):
             async for audio_chunk in block:
                 self._decoder.process_raw(audio_chunk.audio, False, False)
         hyp = self._decoder.hyp()
-        res = TranscribeResult(hyp.hypstr)
-        await self._handle_event(TranscribeEvent((res,), True))
+        if hyp:
+            res = TranscribeResult(hyp.hypstr)
+            await self._handle_event(TranscribeEvent((res,), True))
 
     async def _read_events(self):
         pass

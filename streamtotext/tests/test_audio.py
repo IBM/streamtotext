@@ -116,11 +116,10 @@ class SquelchedSourceTestCase(base.TestCase):
 
     async def test_get_silent_chunk(self):
         a_s = audio.SquelchedSource(audio_fakes.SilentAudioSource(),
-                                    squelch_level=0)
+                                    squelch_level=10)
         async with a_s.listen():
-            block = await a_s.__anext__()
             with self.assertRaises(asyncio.TimeoutError):
-                await asyncio.wait_for(block.__anext__(), .2)
+                await asyncio.wait_for(a_s.__anext__(), .2)
 
     async def test_hello_44100_get_chunk(self):
         path = os.path.join(
@@ -138,4 +137,4 @@ class SquelchedSourceTestCase(base.TestCase):
                 async for chunk in block:
                     chunks.append(chunk)
         self.assertEqual(1, block_cnt)
-        self.assertEqual(22, len(chunks))
+        self.assertEqual(15, len(chunks))

@@ -67,6 +67,10 @@ class AudioBlock(object):
     def __aiter__(self):
         return self
 
+    @property
+    def ended(self):
+        return self._stopped.is_set()
+
     def end(self):
         self._stopped.set()
 
@@ -89,7 +93,7 @@ class AudioBlock(object):
                 try:
                     return chunk_task.result()
                 except StopAsyncIteration:
-                    self._stopped.set()
+                    self.end()
                     raise
             else:
                 raise StopAsyncIteration()
@@ -180,6 +184,24 @@ class EvenChunkIterator(object):
                 return ret_chunk
 
         return merge_chunks(sample_queue)
+
+
+class RememberingIterator(object):
+    def __init__(self, iterator, memory_size):
+        self._iterator = iterator
+        self.memory_size = memory_size
+        self._buff = collections.deque(maxlen=memory_size)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        ret = await self._iterator.__anext__()
+        self._buff.append(ret)
+        return ret
+
+    def memory(self):
+        return self._buff
 
 
 class _ListenCtxtMgr(object):
@@ -426,45 +448,28 @@ class RateConvert(AudioSourceProcessor):
 
 
 class SquelchedBlock(AudioBlock):
-    def __init__(self, source, squelch_level, sample_size, prefix_samples):
+    def __init__(self, source, squelch_level):
         super(SquelchedBlock, self).__init__()
         self._source = source
         self.squelch_level = squelch_level
-        self._recent_chunks = collections.deque(maxlen=prefix_samples)
-        self._squelch_triggered = False
-        self._even_iter = EvenChunkIterator(self._source,
-                                            chunk_size=sample_size)
+        self._sent_mem = False
 
     async def _next_chunk(self):
-        while True:
-            chunk = await self._even_iter.__anext__()
-            self._recent_chunks.append(chunk)
+        if not self._sent_mem:
+            self._sent_mem = True
+            return merge_chunks(self._source.memory())
 
-            was_triggered = self._squelch_triggered
-            self._squelch_triggered = self.check_squelch(
+        async for chunk in self._source:
+            squelch_triggered = SquelchedSource.check_squelch(
                 self.squelch_level,
-                self._squelch_triggered,
-                self._recent_chunks
+                True,
+                self._source.memory()
             )
-            if self._squelch_triggered:
-                if not was_triggered:
-                    return merge_chunks(self._recent_chunks)
-                else:
-                    return chunk
-
-    def check_squelch(self, level, is_triggered, chunks):
-        rms_vals = [audioop.rms(x.audio, x.width) for x in chunks]
-        median_rms = sorted(rms_vals)[int(len(rms_vals) * .5)]
-        if is_triggered:
-            if median_rms < (level * .8):
-                return False
+            if squelch_triggered:
+                return chunk
             else:
-                return True
-        else:
-            if median_rms > self.squelch_level:
-                return True
-            else:
-                return False
+                raise StopAsyncIteration()
+        raise StopAsyncIteration()
 
 
 class SquelchedSource(AudioSourceProcessor):
@@ -489,12 +494,28 @@ class SquelchedSource(AudioSourceProcessor):
     :type prefix_samples: int
     """
     def __init__(self, source, sample_size=1600, squelch_level=None,
-                 prefix_samples=2):
+                 prefix_samples=4):
         super(SquelchedSource, self).__init__(source)
         self._sample_size = sample_size
         self.squelch_level = squelch_level
         self._prefix_samples = prefix_samples
         self._sample_width = 2
+        self._src_block = None
+
+    @staticmethod
+    def check_squelch(level, is_triggered, chunks):
+        rms_vals = [audioop.rms(x.audio, x.width) for x in chunks]
+        median_rms = sorted(rms_vals)[int(len(rms_vals) * .5)]
+        if is_triggered:
+            if median_rms < (level * .8):
+                return False
+            else:
+                return True
+        else:
+            if median_rms > level:
+                return True
+            else:
+                return False
 
     async def detect_squelch_level(self, detect_time=10, threshold=.8):
         start_time = time.time()
@@ -523,9 +544,18 @@ class SquelchedSource(AudioSourceProcessor):
         await super(SquelchedSource, self).start()
 
     async def _next_block(self):
-        src_block = await self._source.__anext__()
-        return SquelchedBlock(src_block, self.squelch_level,
-                              self._sample_size, self._prefix_samples)
+        if self._src_block is None or self._src_block.ended:
+            self._src_block = await self._source.__anext__()
+            even_iter = EvenChunkIterator(self._src_block, self._sample_size)
+            self._mem_iter = RememberingIterator(even_iter,
+                                                 self._prefix_samples)
+        async for _ in self._mem_iter:  # NOQA
+            if SquelchedSource.check_squelch(self.squelch_level,
+                                             False,
+                                             self._mem_iter.memory()):
+                return SquelchedBlock(self._mem_iter,
+                                      self.squelch_level)
+        raise StopAsyncIteration()
 
 
 class AudioPlayer(object):

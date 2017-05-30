@@ -56,6 +56,12 @@ def get_audio_source(channels, frequency, device_ndx=None):
     return mic
 
 
+async def run_transcription(ts):
+    async with ts:
+        while True:
+            asyncio.wait(10)
+
+
 def transcribe(args):
     loop = asyncio.get_event_loop()
 
@@ -63,7 +69,7 @@ def transcribe(args):
                            args.device_index)
 
     if not args.no_squelch:
-        squelch_level=None
+        squelch_level = None
         if args.squelch_level:
             squelch_level = args.squelch_level
         src = audio.SquelchedSource(src, squelch_level=squelch_level)
@@ -97,7 +103,7 @@ def transcribe(args):
         raise RuntimeError('Invalid service')
 
     ts.register_event_handler(handle_transcribe_event)
-    loop.run_until_complete(ts.transcribe())
+    loop.run_until_complete(run_transcription(ts))
 
 
 def main():

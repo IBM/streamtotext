@@ -28,19 +28,14 @@ class FakeTranscriber(transcriber.Transcriber):
 
 
 class EvHandler(object):
-    def __init__(self, ts, call_count=0):
+    def __init__(self, ts):
         self.ts = ts
-        self.called = False
-        self.call_count = call_count
-        self.event = None
+        self.called = asyncio.Event()
+        self.events = []
 
     async def handle(self, event):
-        self.called = True
-        self.event = event
-        if self.call_count <= 0:
-            await self.ts.stop(wait=False)
-        else:
-            self.call_count -= 1
+        self.called.set()
+        self.events.append(event)
 
 
 class FakeTranscriberTestCase(base.TestCase):
@@ -48,8 +43,8 @@ class FakeTranscriberTestCase(base.TestCase):
         ts = FakeTranscriber(audio_fakes.SilentAudioSource())
         handler = EvHandler(ts)
         ts.register_event_handler(handler.handle)
-        await ts.transcribe()
-        self.assertEqual(handler.called, True)
+        async with ts:
+            await handler.called.wait()
 
 
 class FakeWatsonWS(object):
@@ -101,8 +96,8 @@ class WatsonTranscriberTestCase(base.TestCase):
                                                16000, 'fakeuser', 'fakepass')
             handler = EvHandler(ts)
             ts.register_event_handler(handler.handle)
-            await ts.transcribe()
-            self.assertEqual(handler.called, True)
+            async with ts:
+                await handler.called.wait()
 
 
 class PocketSphinxTranscriberTestCase(base.TestCase):
@@ -119,7 +114,8 @@ class PocketSphinxTranscriberTestCase(base.TestCase):
         )
         handler = EvHandler(ts)
         ts.register_event_handler(handler.handle)
-        await ts.transcribe()
-        self.assertEqual(len(handler.event.results), 1)
-        self.assertEqual(handler.event.results[0].transcript,
+        async with ts:
+            await handler.called.wait()
+
+        self.assertEqual(handler.events[0].results[0].transcript,
                          'hello')
